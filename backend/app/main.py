@@ -1,12 +1,19 @@
-from fastapi import FastAPI
+import uuid
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.scoring import AssessmentInput, AssessmentResult, assess
+from app.logging_config import configure_logging, logger
+from app.scoring import AssessmentRequest, AssessmentResponse, score_assessment
+
+configure_logging()
 
 app = FastAPI(
     title="Data Governance Readiness API",
-    description="Transparent rule-based assessment service.",
+    description="Transparent rule-based privacy risk-scoring service.",
     version=settings.version,
 )
 
@@ -19,6 +26,28 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    request_id = str(uuid.uuid4())
+    # Report which fields were invalid, but never echo the submitted values
+    # back to the client or into logs -- some of those values are free-text
+    # questionnaire input.
+    invalid_fields = sorted({".".join(str(part) for part in error["loc"][1:]) for error in exc.errors()})
+    logger.warning(
+        "assessment_validation_failed",
+        extra={"fields": {"requestId": request_id, "invalidFields": invalid_fields}},
+    )
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "invalid_input",
+            "message": "One or more fields are missing or invalid.",
+            "requestId": request_id,
+            "fields": invalid_fields,
+        },
+    )
+
+
 @app.get("/health", tags=["system"])
 def health() -> dict[str, str]:
     return {"status": "ok", "environment": settings.environment}
@@ -29,7 +58,22 @@ def version() -> dict[str, str]:
     return {"version": settings.version}
 
 
-@app.post("/assessments", response_model=AssessmentResult, tags=["assessment"])
-def create_assessment(payload: AssessmentInput) -> AssessmentResult:
-    return assess(payload)
+@app.post("/assessments", response_model=AssessmentResponse, tags=["assessment"])
+def create_assessment(payload: AssessmentRequest) -> AssessmentResponse:
+    request_id = str(uuid.uuid4())
+    result = score_assessment(payload)
+    logger.info(
+        "assessment_scored",
+        extra={
+            "fields": {
+                "requestId": request_id,
+                "schemaVersion": result.schemaVersion,
+                "rulesVersion": result.rulesVersion,
+                "score": result.score,
+                "level": result.level,
+                "ruleIds": [factor.ruleId for factor in result.factors],
+            }
+        },
+    )
+    return result
 

@@ -25,13 +25,20 @@ def test_health_and_version():
     assert client.get("/version").json()["version"] == "0.1.0"
 
 
-def test_assessment_returns_transparent_score():
+def test_assessment_returns_transparent_score_with_attribution():
     response = client.post("/assessments", json=sample_payload())
     assert response.status_code == 200
     body = response.json()
     assert body["score"] == 38
     assert body["level"] == "MEDIUM"
+    assert body["schemaVersion"] == "1.0"
+    assert body["rulesVersion"] == "1.0"
     assert "Protected matching" in body["capabilities"]
+    assert {factor["ruleId"] for factor in body["factors"]} == {
+        "DATA_SENSITIVITY_DIRECT",
+        "EXTERNAL_ACCESS",
+        "PURPOSE_MATCHING",
+    }
 
 
 def test_high_risk_regulated_use_includes_limitations():
@@ -52,7 +59,23 @@ def test_high_risk_regulated_use_includes_limitations():
     assert len(body["limitations"]) == 2
 
 
-def test_invalid_input_has_clear_api_validation():
+def test_invalid_input_returns_clear_client_error_without_echoing_input():
     response = client.post("/assessments", json=sample_payload(description="Too short", dataTypes=[]))
     assert response.status_code == 422
+    body = response.json()
+    assert body["error"] == "invalid_input"
+    assert "requestId" in body
+    assert "description" in body["fields"]
+    assert "dataTypes" in body["fields"]
+    # The invalid free-text value must never be echoed back to the client.
+    assert "Too short" not in response.text
 
+
+def test_unsupported_purpose_is_rejected():
+    response = client.post("/assessments", json=sample_payload(purpose="unsupported-value"))
+    assert response.status_code == 422
+
+
+def test_unsupported_extra_field_is_rejected():
+    response = client.post("/assessments", json=sample_payload(unexpectedField="value"))
+    assert response.status_code == 422
