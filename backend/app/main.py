@@ -29,10 +29,15 @@ app.add_middleware(
 @app.exception_handler(RequestValidationError)
 async def handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     request_id = str(uuid.uuid4())
-    # Report which fields were invalid, but never echo the submitted values
-    # back to the client or into logs -- some of those values are free-text
-    # questionnaire input.
-    invalid_fields = sorted({".".join(str(part) for part in error["loc"][1:]) for error in exc.errors()})
+    known_fields = AssessmentRequest.model_fields.keys()
+    invalid_fields = sorted(
+        {
+            str(error["loc"][1])
+            if len(error["loc"]) > 1 and error["loc"][1] in known_fields
+            else "body"
+            for error in exc.errors()
+        }
+    )
     logger.warning(
         "assessment_validation_failed",
         extra={"fields": {"requestId": request_id, "invalidFields": invalid_fields}},
@@ -76,4 +81,3 @@ def create_assessment(payload: AssessmentRequest) -> AssessmentResponse:
         },
     )
     return result
-

@@ -95,10 +95,15 @@ export function AssessmentWizard() {
     if (message) { setError(message); return; }
     setLoading(true);
     setError(null);
-    const response = await requestAssessment(input);
-    setResult(response);
-    setLoading(false);
-    moveTo(2);
+    try {
+      const response = await requestAssessment(input);
+      setResult(response);
+      moveTo(2);
+    } catch {
+      setError("The assessment service could not complete this request. Check your answers and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const reset = () => {

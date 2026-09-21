@@ -79,3 +79,18 @@ def test_unsupported_purpose_is_rejected():
 def test_unsupported_extra_field_is_rejected():
     response = client.post("/assessments", json=sample_payload(unexpectedField="value"))
     assert response.status_code == 422
+
+
+def test_user_controlled_extra_field_name_is_not_echoed_or_logged(caplog):
+    submitted_field_name = "person@example.com"
+
+    with caplog.at_level("WARNING", logger="governance.scoring"):
+        response = client.post(
+            "/assessments",
+            json=sample_payload(**{submitted_field_name: "sensitive value"}),
+        )
+
+    assert response.status_code == 422
+    assert response.json()["fields"] == ["body"]
+    assert submitted_field_name not in response.text
+    assert submitted_field_name not in caplog.text

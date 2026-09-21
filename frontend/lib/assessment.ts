@@ -253,15 +253,22 @@ export async function requestAssessment(input: AssessmentInput): Promise<Assessm
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!baseUrl) return assessLocally(input);
 
+  let response: Response;
   try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/assessments`, {
+    response = await fetch(`${baseUrl.replace(/\/$/, "")}/assessments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...input }),
     });
-    if (!response.ok) throw new Error(`Assessment service returned ${response.status}`);
-    return await response.json() as AssessmentResult;
   } catch {
     return assessLocally(input);
+  }
+
+  if (!response.ok) throw new Error(`Assessment service returned ${response.status}`);
+
+  try {
+    return await response.json() as AssessmentResult;
+  } catch {
+    throw new Error("Assessment service returned an invalid response");
   }
 }

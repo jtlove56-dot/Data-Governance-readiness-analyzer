@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { AssessmentInput, assessLocally, validateDescription, validateQuestions } from "../lib/assessment";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  AssessmentInput,
+  assessLocally,
+  requestAssessment,
+  validateDescription,
+  validateQuestions,
+} from "../lib/assessment";
 
 const baseline: AssessmentInput = {
   description: "Match customer email addresses with a partner for campaign measurement.",
@@ -11,6 +17,11 @@ const baseline: AssessmentInput = {
   secondaryUse: "no",
   purpose: "matching",
 };
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 describe("assessment rubric", () => {
   it("maps a partner matching use case to medium risk", () => {
@@ -64,5 +75,35 @@ describe("assessment rubric", () => {
   it("provides plain-language validation", () => {
     expect(validateDescription("short")).toMatch(/more detail/i);
     expect(validateQuestions({ ...baseline, rawExchange: "" })).toMatch(/each Yes or No/i);
+  });
+
+  it("sends an explicit schema version to the assessment API", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test/");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(assessLocally(baseline)), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestAssessment(baseline);
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({ schemaVersion: "1.0" });
+  });
+
+  it("uses local scoring when the configured API is unreachable", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network unavailable")));
+
+    await expect(requestAssessment(baseline)).resolves.toMatchObject({ score: 38, rulesVersion: "1.0" });
+  });
+
+  it("does not hide an API validation error with a local score", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 422 })));
+
+    await expect(requestAssessment(baseline)).rejects.toThrow("Assessment service returned 422");
   });
 });
