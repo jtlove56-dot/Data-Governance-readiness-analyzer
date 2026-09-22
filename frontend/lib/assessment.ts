@@ -249,6 +249,15 @@ export function assessLocally(input: AssessmentInput, assessedAt = new Date().to
   };
 }
 
+/**
+ * Only the fields the rubric scores leave the browser. The free-text
+ * description stays client-side for the on-screen record and report.
+ */
+export function toScoringPayload(input: AssessmentInput): Omit<AssessmentInput, "description"> {
+  const { dataTypes, externalAccess, rawExchange, dataMovement, combined, secondaryUse, purpose } = input;
+  return { dataTypes, externalAccess, rawExchange, dataMovement, combined, secondaryUse, purpose };
+}
+
 export async function requestAssessment(input: AssessmentInput): Promise<AssessmentResult> {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!baseUrl) return assessLocally(input);
@@ -258,7 +267,8 @@ export async function requestAssessment(input: AssessmentInput): Promise<Assessm
     response = await fetch(`${baseUrl.replace(/\/$/, "")}/assessments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...input }),
+      body: JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...toScoringPayload(input) }),
+      cache: "no-store",
     });
   } catch {
     return assessLocally(input);
