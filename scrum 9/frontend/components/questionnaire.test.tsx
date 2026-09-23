@@ -9,6 +9,14 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.uns
 
 function clickButton(name: string) { fireEvent.click(screen.getByRole("button", { name })); }
 
+const validatedReceipt = {
+  status: "validated",
+  submission_id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+  schema_version: "1.0",
+  stored: false,
+  scored: false
+};
+
 function fillStep(index: number, answers = example) {
   if (index === 0) for (const value of answers.data_types) {
     const type = dataTypes.find((item) => item.value === value)!;
@@ -64,7 +72,7 @@ describe("Questionnaire", () => {
 
   it("submits the exact shared backend contract to the configured URL", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test/");
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: "validated", submission_id: "test-reference" }) });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => validatedReceipt });
     vi.stubGlobal("fetch", fetchMock);
     reachReview();
     clickButton("Submit questionnaire");
@@ -78,7 +86,7 @@ describe("Questionnaire", () => {
 
   it("keeps answers after a failed request and supports retry", async () => {
     const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("Network error"))
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "validated", submission_id: "retry-reference" }) });
+      .mockResolvedValueOnce({ ok: true, json: async () => validatedReceipt });
     vi.stubGlobal("fetch", fetchMock);
     reachReview();
     clickButton("Submit questionnaire");
@@ -87,6 +95,29 @@ describe("Questionnaire", () => {
     clickButton("Submit questionnaire");
     await screen.findByText("Your answers passed validation.");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a receipt that contradicts the confirmation message", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...validatedReceipt, stored: true })
+    }));
+    reachReview();
+    clickButton("Submit questionnaire");
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("unexpected response"));
+    expect(screen.queryByText("Your answers passed validation.")).not.toBeInTheDocument();
+    expect(screen.getByText(example.purpose)).toBeInTheDocument();
+  });
+
+  it("shows a useful error when a successful response is not JSON", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => { throw new SyntaxError("Unexpected token '<'"); }
+    }));
+    reachReview();
+    clickButton("Submit questionnaire");
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("unexpected response"));
+    expect(screen.getByRole("alert")).not.toHaveTextContent("Unexpected token");
   });
 
   it("requires conditional details and omits inactive details from submission", () => {

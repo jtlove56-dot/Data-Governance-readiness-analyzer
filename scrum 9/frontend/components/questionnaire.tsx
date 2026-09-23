@@ -6,6 +6,23 @@ import {
   initialAnswers, steps, toRequest, validateStep
 } from "../lib/questionnaire";
 
+type AssessmentReceipt = {
+  submission_id: string;
+  status: "validated";
+  schema_version: "1.0";
+  stored: false;
+  scored: false;
+};
+
+function isAssessmentReceipt(value: unknown): value is AssessmentReceipt {
+  return typeof value === "object" && value !== null
+    && "submission_id" in value && typeof value.submission_id === "string"
+    && "status" in value && value.status === "validated"
+    && "schema_version" in value && value.schema_version === "1.0"
+    && "stored" in value && value.stored === false
+    && "scored" in value && value.scored === false;
+}
+
 export function Questionnaire() {
   const [answers, setAnswers] = useState<Answers>(initialAnswers);
   const [step, setStep] = useState(0);
@@ -75,10 +92,13 @@ export function Questionnaire() {
           ? "Your answers could not be validated. Review your answers and try again."
           : "We could not submit your answers. They are still here; please try again.");
       }
-      const result: unknown = await response.json();
-      if (typeof result !== "object" || result === null || !("submission_id" in result)
-          || typeof result.submission_id !== "string" || !("status" in result)
-          || result.status !== "validated") {
+      let result: unknown;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error("The service returned an unexpected response. Your answers are still here; please try again.");
+      }
+      if (!isAssessmentReceipt(result)) {
         throw new Error("The service returned an unexpected response. Your answers are still here; please try again.");
       }
       setReceipt(result.submission_id);

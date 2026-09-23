@@ -34,7 +34,7 @@ mapping, request contract, tests, and the outstanding approved-rubric check.
 
 ## Prerequisites
 
-- Node.js 20 or newer.
+- Node.js 20.19+, 22.12+, or 24+.
 - pnpm 10 or newer.
 - Python 3.11 or newer.
 
