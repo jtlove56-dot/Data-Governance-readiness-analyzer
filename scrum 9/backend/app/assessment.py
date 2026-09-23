@@ -4,8 +4,14 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DataType = Literal[
-    "names", "email", "health", "financial", "location", "online_ids",
-    "other", "unknown",
+    "names",
+    "email",
+    "health",
+    "financial",
+    "location",
+    "online_ids",
+    "other",
+    "unknown",
 ]
 Answer = Literal["yes", "no", "unsure"]
 RequiredText = Annotated[str, Field(min_length=1, max_length=2000)]
@@ -37,12 +43,17 @@ class AssessmentRequest(BaseModel):
             raise ValueError("Select each data type only once.")
         conditions = [
             ("other" in self.data_types, self.other_data_types, "other data types"),
-            (self.external_access == "yes", self.external_access_details,
-             "external access"),
-            (self.secondary_use == "yes", self.secondary_use_details,
-             "secondary use"),
-            (self.reidentification == "yes", self.reidentification_details,
-             "re-identification"),
+            (
+                self.external_access == "yes",
+                self.external_access_details,
+                "external access",
+            ),
+            (self.secondary_use == "yes", self.secondary_use_details, "secondary use"),
+            (
+                self.reidentification == "yes",
+                self.reidentification_details,
+                "re-identification",
+            ),
         ]
         for required, details, label in conditions:
             if required and not details:

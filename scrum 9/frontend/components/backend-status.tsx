@@ -18,7 +18,7 @@ export function BackendStatus() {
   const [state, setState] = useState<RequestState>({ kind: "loading" });
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
-    []
+    [],
   );
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export function BackendStatus() {
     async function loadHealth() {
       try {
         const response = await fetch(`${apiBaseUrl}/health`, {
-          signal: controller.signal
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -63,7 +63,9 @@ export function BackendStatus() {
       </div>
 
       {state.kind === "loading" && (
-        <p className="mt-4 text-sm text-[var(--muted)]">Checking API health...</p>
+        <p className="mt-4 text-sm text-[var(--muted)]">
+          Checking API health...
+        </p>
       )}
 
       {state.kind === "error" && (

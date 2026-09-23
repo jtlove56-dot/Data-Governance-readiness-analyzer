@@ -55,5 +55,4 @@ def version() -> VersionResponse:
 
 @app.post("/assessments", tags=["assessments"], response_model=AssessmentReceipt)
 def submit_assessment(answers: AssessmentRequest) -> AssessmentReceipt:
-    """Validate questionnaire input; scoring and durable storage are separate work."""
     return AssessmentReceipt()

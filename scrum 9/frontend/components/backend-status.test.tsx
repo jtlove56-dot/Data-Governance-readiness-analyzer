@@ -17,9 +17,9 @@ describe("BackendStatus", () => {
           service: "karlsgate-api",
           status: "ok",
           environment: "test",
-          version: "0.1.0"
-        })
-      })
+          version: "0.1.0",
+        }),
+      }),
     );
 
     render(React.createElement(BackendStatus));
