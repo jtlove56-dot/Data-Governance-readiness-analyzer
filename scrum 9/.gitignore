@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+*.tsbuildinfo
+
+# Builds
+.next/
+out/
+dist/
+coverage/
+htmlcov/
+
+# Local secrets and machine state
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+!backend/.env.example
+.DS_Store
+Thumbs.db
+*.log
