@@ -16,6 +16,17 @@ export const PURPOSE_LABELS = {
   other: "Other",
 } as const;
 
+/** Question wording, shared by the wizard and the downloadable report. */
+export const QUESTION_LABELS = {
+  dataTypes: "What information is involved?",
+  externalAccess: "Will another organization access the data?",
+  rawExchange: "Will raw identifiable values be exchanged?",
+  dataMovement: "Will data leave its current controlled environment?",
+  combined: "Will it be combined with other datasets?",
+  secondaryUse: "Could it be reused beyond the purpose described?",
+  purpose: "What is the intended use?",
+} as const;
+
 export type DataType = keyof typeof DATA_TYPE_LABELS;
 export type Purpose = keyof typeof PURPOSE_LABELS;
 export type YesNo = "yes" | "no";
