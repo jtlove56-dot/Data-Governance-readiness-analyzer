@@ -8,12 +8,14 @@ import {
   DataType,
   EMPTY_INPUT,
   PURPOSE_LABELS,
+  QUESTION_LABELS,
   Purpose,
   YesNo,
   requestAssessment,
   validateDescription,
   validateQuestions,
 } from "@/lib/assessment";
+import { downloadAssessmentReport } from "@/lib/report";
 import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
 
 const STEPS = ["Describe", "Answer questions", "Assessment", "Recommendations"] as const;
@@ -54,6 +56,8 @@ export function AssessmentWizard() {
   const [result, setResult] = useState<AssessmentResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
   const mainHeading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -139,36 +143,17 @@ export function AssessmentWizard() {
     clearDraft();
   };
 
-  const download = () => {
+  const download = async () => {
     if (!result) return;
-    const report = [
-      "DATA GOVERNANCE READINESS ASSESSMENT",
-      `Assessed: ${new Date(result.assessedAt).toLocaleString()}`,
-      "",
-      "USE CASE",
-      input.description,
-      "",
-      `RISK: ${result.level} — ${result.score}/100`,
-      result.guidance,
-      "",
-      "SCORING FACTORS",
-      ...result.factors.map((item) => `- ${item.label}: +${item.points}`),
-      "",
-      "RECOMMENDED CONTROLS",
-      ...result.recommendations.map((item) => `- ${item}`),
-      "",
-      "KARLSGATE CAPABILITIES",
-      ...result.capabilities.map((item) => `- ${item}`),
-      ...(result.limitations.length ? ["", "LIMITATIONS", ...result.limitations.map((item) => `- ${item}`)] : []),
-      "",
-      "Decision support only. Specialist legal, privacy, and security review may still be required.",
-    ].join("\n");
-    const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "data-governance-assessment.txt";
-    link.click();
-    URL.revokeObjectURL(url);
+    setDownloading(true);
+    setReportError(null);
+    try {
+      await downloadAssessmentReport(input, result);
+    } catch {
+      setReportError("The report could not be generated. Your assessment is still here—please try again.");
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -236,7 +221,7 @@ export function AssessmentWizard() {
               <p className="lede">Answer based on the planned operating model—not the best-case outcome.</p>
 
               <fieldset className="question-block">
-                <legend>What information is involved?</legend>
+                <legend>{QUESTION_LABELS.dataTypes}</legend>
                 <p>Select every type that applies.</p>
                 <div className="choice-grid">
                   {(Object.entries(DATA_TYPE_LABELS) as [DataType, string][]).map(([key, label]) => (
@@ -245,14 +230,14 @@ export function AssessmentWizard() {
                 </div>
               </fieldset>
 
-              <BinaryQuestion legend="Will another organization access the data?" value={input.externalAccess} onChange={(value) => update("externalAccess", value)} />
-              <BinaryQuestion legend="Will raw identifiable values be exchanged?" detail="Raw means unmasked values that directly identify a person." value={input.rawExchange} onChange={(value) => update("rawExchange", value)} />
-              <BinaryQuestion legend="Will data leave its current controlled environment?" value={input.dataMovement} onChange={(value) => update("dataMovement", value)} />
-              <BinaryQuestion legend="Will it be combined with other datasets?" value={input.combined} onChange={(value) => update("combined", value)} />
-              <BinaryQuestion legend="Could it be reused beyond the purpose described?" value={input.secondaryUse} onChange={(value) => update("secondaryUse", value)} />
+              <BinaryQuestion legend={QUESTION_LABELS.externalAccess} value={input.externalAccess} onChange={(value) => update("externalAccess", value)} />
+              <BinaryQuestion legend={QUESTION_LABELS.rawExchange} detail="Raw means unmasked values that directly identify a person." value={input.rawExchange} onChange={(value) => update("rawExchange", value)} />
+              <BinaryQuestion legend={QUESTION_LABELS.dataMovement} value={input.dataMovement} onChange={(value) => update("dataMovement", value)} />
+              <BinaryQuestion legend={QUESTION_LABELS.combined} value={input.combined} onChange={(value) => update("combined", value)} />
+              <BinaryQuestion legend={QUESTION_LABELS.secondaryUse} value={input.secondaryUse} onChange={(value) => update("secondaryUse", value)} />
 
               <label className="select-field" htmlFor="purpose">
-                <span>What is the intended use?</span>
+                <span>{QUESTION_LABELS.purpose}</span>
                 <select id="purpose" value={input.purpose} onChange={(event) => update("purpose", event.target.value as Purpose)}>
                   {(Object.entries(PURPOSE_LABELS) as [Purpose, string][]).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                 </select>
@@ -296,7 +281,8 @@ export function AssessmentWizard() {
               </div>
               {result.limitations.length > 0 && <div className="limitations"><h3>Specialist review required</h3>{result.limitations.map((item) => <p key={item}>{item}</p>)}</div>}
               <details className="summary"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Assessed</dt><dd>{new Date(result.assessedAt).toLocaleString()}</dd></div></dl></details>
-              <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button className="secondary" type="button" onClick={reset}>Start over</button><button className="primary" type="button" onClick={download}>Download report ↓</button></div></div>
+              {reportError && <p className="error" role="alert">{reportError}</p>}
+              <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button className="secondary" type="button" onClick={reset}>Start over</button><button className="primary" type="button" disabled={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
             </div>
           )}
         </section>
