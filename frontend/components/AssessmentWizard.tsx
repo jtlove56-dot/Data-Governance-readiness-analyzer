@@ -92,7 +92,7 @@ export function AssessmentWizard() {
   }, []);
 
   useEffect(() => {
-    if (step > 0) mainHeading.current?.focus();
+    mainHeading.current?.focus();
   }, [step]);
 
   const update = <K extends keyof AssessmentInput>(key: K, value: AssessmentInput[K]) => {

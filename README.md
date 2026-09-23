@@ -5,11 +5,9 @@ A guided, plain-language assessment for identifying privacy and governance risks
 ## Architecture
 
 - `frontend/` — Next.js App Router, React, TypeScript, and Tailwind CSS
-- `backend/` — FastAPI health and version service
+- `backend/` — FastAPI assessment and scoring service
 - `docs/` — versioned scoring rubric, capability language, deployment guidance, and [data handling and retention](docs/data-handling.md)
 - `.github/workflows/ci.yml` — frontend and backend quality gates
-
-The original single-file prototype remains at `data-governance-readiness-analyzer.html` for reference. The supported application is the TypeScript frontend in `frontend/`.
 
 ## Local development
 
@@ -54,6 +52,3 @@ pytest
 ## Deployment
 
 Deployment configuration and environment requirements are documented in [docs/deployment.md](docs/deployment.md). Do not commit credentials or production-sensitive data.
-
-
-gbgh
