@@ -93,6 +93,19 @@ describe("assessment rubric", () => {
     expect(JSON.parse(request.body as string)).toMatchObject({ schemaVersion: "1.0" });
   });
 
+  it("never sends the free-text description to the assessment API", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(assessLocally(baseline)), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestAssessment(baseline);
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(request.body).not.toContain(baseline.description);
+    expect(JSON.parse(request.body as string)).not.toHaveProperty("description");
+    expect(request.cache).toBe("no-store");
+  });
+
   it("uses local scoring when the configured API is unreachable", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network unavailable")));

@@ -140,9 +140,16 @@ def test_rejects_empty_data_types():
         )
 
 
-def test_rejects_short_description():
+def test_description_is_optional_and_discarded():
+    with_description = sample_payload()
+    without_description = sample_payload(description=None)
+    assert score_assessment(without_description).score == score_assessment(with_description).score
+    assert "description" not in with_description.model_dump()
+
+
+def test_rejects_oversized_description():
     with pytest.raises(ValidationError):
-        sample_payload(description="Too short")
+        sample_payload(description="x" * 1001)
 
 
 def test_rejects_unknown_purpose():

@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.logging_config import JsonFormatter
 from app.main import app
 
 client = TestClient(app)
@@ -60,7 +61,8 @@ def test_high_risk_regulated_use_includes_limitations():
 
 
 def test_invalid_input_returns_clear_client_error_without_echoing_input():
-    response = client.post("/assessments", json=sample_payload(description="Too short", dataTypes=[]))
+    oversized = "sensitive " * 120
+    response = client.post("/assessments", json=sample_payload(description=oversized, dataTypes=[]))
     assert response.status_code == 422
     body = response.json()
     assert body["error"] == "invalid_input"
@@ -68,7 +70,7 @@ def test_invalid_input_returns_clear_client_error_without_echoing_input():
     assert "description" in body["fields"]
     assert "dataTypes" in body["fields"]
     # The invalid free-text value must never be echoed back to the client.
-    assert "Too short" not in response.text
+    assert "sensitive" not in response.text
 
 
 def test_unsupported_purpose_is_rejected():
@@ -94,3 +96,26 @@ def test_user_controlled_extra_field_name_is_not_echoed_or_logged(caplog):
     assert response.json()["fields"] == ["body"]
     assert submitted_field_name not in response.text
     assert submitted_field_name not in caplog.text
+
+
+def test_scores_without_description():
+    payload = sample_payload()
+    del payload["description"]
+    response = client.post("/assessments", json=payload)
+    assert response.status_code == 200
+    assert response.json()["score"] == 38
+
+
+def test_assessment_responses_are_not_cached():
+    response = client.post("/assessments", json=sample_payload())
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_scoring_logs_exclude_questionnaire_input(caplog):
+    description = "Share patient records from Riverside Clinic with a vendor."
+    with caplog.at_level("INFO", logger="governance.scoring"):
+        client.post("/assessments", json=sample_payload(description=description, dataTypes=["health"]))
+    logged = "\n".join(JsonFormatter().format(record) for record in caplog.records)
+    assert "assessment_scored" in logged
+    assert "Riverside" not in logged
+    assert "health" not in logged

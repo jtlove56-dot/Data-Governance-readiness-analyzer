@@ -1,8 +1,10 @@
 """Versioned request/response schemas for the risk-scoring service."""
 
+from __future__ import annotations
+
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 SCHEMA_VERSION = "1.0"
 
@@ -18,7 +20,9 @@ class AssessmentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schemaVersion: Literal["1.0"] = SCHEMA_VERSION
-    description: str = Field(min_length=20, max_length=1000)
+    # Not used by the rubric. The frontend no longer sends it (SCRUM-16);
+    # accepted only so older clients keep working, then discarded.
+    description: str | None = Field(default=None, max_length=1000, exclude=True)
     dataTypes: list[DataType] = Field(min_length=1)
     externalAccess: YesNo
     rawExchange: YesNo
@@ -26,14 +30,6 @@ class AssessmentRequest(BaseModel):
     combined: YesNo
     secondaryUse: YesNo
     purpose: Purpose
-
-    @field_validator("description")
-    @classmethod
-    def meaningful_description(cls, value: str) -> str:
-        cleaned = value.strip()
-        if len(cleaned) < 20:
-            raise ValueError("describe the data, who will use it, and why")
-        return cleaned
 
 
 class RiskFactor(BaseModel):

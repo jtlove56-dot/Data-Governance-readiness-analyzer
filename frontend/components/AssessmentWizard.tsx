@@ -14,9 +14,11 @@ import {
   validateDescription,
   validateQuestions,
 } from "@/lib/assessment";
+import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
 
 const STEPS = ["Describe", "Answer questions", "Assessment", "Recommendations"] as const;
-const STORAGE_KEY = "governance-assessment-draft-v1";
+const RETENTION_NOTICE =
+  "Your answers stay in this browser tab only. They are not saved on our servers and are cleared when you close the tab, start over, or are inactive for 30 minutes.";
 
 function Choice({ selected, children, onClick }: { selected: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
@@ -55,17 +57,39 @@ export function AssessmentWizard() {
   const mainHeading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (!saved) return;
-    let restored: AssessmentInput;
-    try { restored = { ...EMPTY_INPUT, ...JSON.parse(saved) as AssessmentInput }; } catch { return; }
+    purgeLegacyDrafts();
+    const restored = loadDraft();
+    if (!restored) return;
     const restoreDraft = window.setTimeout(() => setInput(restored), 0);
     return () => window.clearTimeout(restoreDraft);
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(input));
+    saveDraft(input);
   }, [input]);
+
+  // Clear the draft after a period of inactivity, even if the tab stays open.
+  useEffect(() => {
+    let idle: number;
+    const restart = () => {
+      window.clearTimeout(idle);
+      idle = window.setTimeout(() => {
+        clearDraft();
+        setInput(EMPTY_INPUT);
+        setResult(null);
+        setStep(0);
+        setMaxReached(0);
+        setError("Your session expired after 30 minutes of inactivity, so your answers were cleared.");
+      }, IDLE_TIMEOUT_MS);
+    };
+    const events = ["pointerdown", "keydown", "scroll"] as const;
+    events.forEach((name) => window.addEventListener(name, restart, { passive: true }));
+    restart();
+    return () => {
+      window.clearTimeout(idle);
+      events.forEach((name) => window.removeEventListener(name, restart));
+    };
+  }, []);
 
   useEffect(() => {
     if (step > 0) mainHeading.current?.focus();
@@ -112,7 +136,7 @@ export function AssessmentWizard() {
     setStep(0);
     setMaxReached(0);
     setError(null);
-    window.localStorage.removeItem(STORAGE_KEY);
+    clearDraft();
   };
 
   const download = () => {
@@ -193,13 +217,14 @@ export function AssessmentWizard() {
                   value={input.description}
                   onChange={(event) => update("description", event.target.value)}
                   maxLength={1000}
-                  aria-describedby="description-help description-error"
+                  aria-describedby="description-help description-error retention-notice"
                   aria-invalid={Boolean(error)}
                   placeholder="For example: We want to compare our customer database with a partner’s records to understand which customers we share."
                 />
               </label>
-              <div className="field-meta" id="description-help"><span>A clear sentence or two is enough.</span><span>{input.description.length} / 1,000</span></div>
+              <div className="field-meta" id="description-help"><span>A clear sentence or two is enough. Avoid names or other identifying details.</span><span>{input.description.length} / 1,000</span></div>
               {error && <p className="error" id="description-error" role="alert">{error}</p>}
+              <p className="method-note" id="retention-notice">{RETENTION_NOTICE}</p>
               <div className="actions end"><button className="primary" type="button" onClick={() => moveTo(1)}>Continue <span>→</span></button></div>
             </div>
           )}
@@ -276,7 +301,7 @@ export function AssessmentWizard() {
           )}
         </section>
       </div>
-      <footer><span>Decision support, not legal advice.</span><span>Rubric v1.0</span></footer>
+      <footer><span>Decision support, not legal advice. Assessments are not retained.</span><span>Rubric v1.0</span></footer>
     </main>
   );
 }

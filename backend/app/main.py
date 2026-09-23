@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -64,8 +64,10 @@ def version() -> dict[str, str]:
 
 
 @app.post("/assessments", response_model=AssessmentResponse, tags=["assessment"])
-def create_assessment(payload: AssessmentRequest) -> AssessmentResponse:
+def create_assessment(payload: AssessmentRequest, response: Response) -> AssessmentResponse:
     request_id = str(uuid.uuid4())
+    # Results describe a sensitive use case; keep them out of browser and proxy caches.
+    response.headers["Cache-Control"] = "no-store"
     result = score_assessment(payload)
     logger.info(
         "assessment_scored",
