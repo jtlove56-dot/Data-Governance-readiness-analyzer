@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.logging_config import JsonFormatter
@@ -81,6 +82,21 @@ def test_unsupported_purpose_is_rejected():
 def test_unsupported_extra_field_is_rejected():
     response = client.post("/assessments", json=sample_payload(unexpectedField="value"))
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize("origin", ["http://localhost:3000", "http://127.0.0.1:3000"])
+def test_development_frontend_origins_can_post(origin):
+    response = client.options(
+        "/assessments",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
 
 
 def test_user_controlled_extra_field_name_is_not_echoed_or_logged(caplog):
