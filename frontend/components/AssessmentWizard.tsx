@@ -7,6 +7,7 @@ import {
   DATA_TYPE_LABELS,
   DataType,
   EMPTY_INPUT,
+  CAPABILITY_COPY,
   PURPOSE_LABELS,
   QUESTION_LABELS,
   Purpose,
@@ -158,6 +159,7 @@ export function AssessmentWizard() {
 
   return (
     <main>
+      <a className="skip-link" href="#assessment">Skip to the assessment</a>
       <header className="masthead">
         <a className="brand" href="#top" aria-label="Karlsgate home">KARLSGATE</a>
         <span className="edition">READINESS / 01</span>
@@ -189,7 +191,10 @@ export function AssessmentWizard() {
           <div className="progress-track" aria-hidden="true"><i style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} /></div>
         </aside>
 
-        <section className="workspace" aria-live="polite">
+        <section className="workspace" id="assessment">
+          <p className="sr-only" role="status">
+            {loading ? "Assessing your answers." : `Step ${step + 1} of ${STEPS.length}: ${STEPS[step]}`}
+          </p>
           {step === 0 && (
             <div className="step-panel">
               <p className="section-number">01 / DESCRIBE</p>
@@ -230,11 +235,11 @@ export function AssessmentWizard() {
                 </div>
               </fieldset>
 
-              <BinaryQuestion legend={QUESTION_LABELS.externalAccess} value={input.externalAccess} onChange={(value) => update("externalAccess", value)} />
+              <BinaryQuestion legend={QUESTION_LABELS.externalAccess} detail="Another organization means anyone outside your own—a partner, vendor, agency, or research group." value={input.externalAccess} onChange={(value) => update("externalAccess", value)} />
               <BinaryQuestion legend={QUESTION_LABELS.rawExchange} detail="Raw means unmasked values that directly identify a person." value={input.rawExchange} onChange={(value) => update("rawExchange", value)} />
-              <BinaryQuestion legend={QUESTION_LABELS.dataMovement} value={input.dataMovement} onChange={(value) => update("dataMovement", value)} />
-              <BinaryQuestion legend={QUESTION_LABELS.combined} value={input.combined} onChange={(value) => update("combined", value)} />
-              <BinaryQuestion legend={QUESTION_LABELS.secondaryUse} value={input.secondaryUse} onChange={(value) => update("secondaryUse", value)} />
+              <BinaryQuestion legend={QUESTION_LABELS.dataMovement} detail="For example, copying it to a partner’s system, a different cloud account, a spreadsheet, or a laptop." value={input.dataMovement} onChange={(value) => update("dataMovement", value)} />
+              <BinaryQuestion legend={QUESTION_LABELS.combined} detail="Joining datasets can make someone identifiable even when neither set identified them on its own." value={input.combined} onChange={(value) => update("combined", value)} />
+              <BinaryQuestion legend={QUESTION_LABELS.secondaryUse} detail="Reuse means using the data later for something other than the purpose you described above." value={input.secondaryUse} onChange={(value) => update("secondaryUse", value)} />
 
               <label className="select-field" htmlFor="purpose">
                 <span>{QUESTION_LABELS.purpose}</span>
@@ -276,8 +281,12 @@ export function AssessmentWizard() {
               </ol>
               <div className="capability-panel">
                 <p className="section-number">KARLSGATE CAPABILITY FIT</p>
-                <h3>{result.capabilities.join(" · ")}</h3>
-                <p>Karlsgate can apply these controls without requiring raw identifiers to be exposed to another party.</p>
+                <h3>Controls that fit this use case</h3>
+                <ul className="capability-list">
+                  {result.capabilities.map((capability) => (
+                    <li key={capability}><b>{capability}</b><p>{CAPABILITY_COPY[capability] ?? ""}</p></li>
+                  ))}
+                </ul>
               </div>
               {result.limitations.length > 0 && <div className="limitations"><h3>Specialist review required</h3>{result.limitations.map((item) => <p key={item}>{item}</p>)}</div>}
               <details className="summary"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Assessed</dt><dd>{new Date(result.assessedAt).toLocaleString()}</dd></div></dl></details>
