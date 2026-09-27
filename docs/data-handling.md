@@ -30,7 +30,7 @@ The API still accepts `description` so older clients keep working, but it is nev
 1. The person types into the wizard. Input is held in React state and mirrored to `sessionStorage` (`governance-assessment-draft-v2`) so a refresh does not lose work.
 2. On **Assess risk**, the browser sends only the scored fields to `POST /assessments` in the request body. Nothing goes in the URL or query string. When the API is unreachable, the same rules run locally in the browser.
 3. The API scores the request in memory and returns the result with `Cache-Control: no-store`. Nothing is written to a database.
-4. The report is generated entirely in the browser as a Blob and downloaded with a generic filename (`data-governance-assessment.txt`). It is never uploaded.
+4. The PDF report is generated entirely in the browser (jsPDF) and downloaded with a generic filename (`data-governance-assessment.pdf`). It is never uploaded, and it carries no author or keyword metadata and no internal rule identifiers. See `frontend/lib/report.ts`.
 
 ## Session lifetime and deletion
 
