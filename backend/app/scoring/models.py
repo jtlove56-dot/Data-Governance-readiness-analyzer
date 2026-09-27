@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,7 +22,7 @@ class AssessmentRequest(BaseModel):
     schemaVersion: Literal["1.0"] = SCHEMA_VERSION
     # Not used by the rubric. The frontend no longer sends it (SCRUM-16);
     # accepted only so older clients keep working, then discarded.
-    description: str | None = Field(default=None, max_length=1000, exclude=True)
+    description: Optional[str] = Field(default=None, max_length=1000, exclude=True)
     dataTypes: list[DataType] = Field(min_length=1)
     externalAccess: YesNo
     rawExchange: YesNo
