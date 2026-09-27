@@ -27,6 +27,25 @@ export const QUESTION_LABELS = {
   purpose: "What is the intended use?",
 } as const;
 
+/**
+ * Approved plain-language copy for each capability, quoted from
+ * docs/risk-scoring-rubric-v1.0.md (SCRUM-6). Keyed by the capability
+ * label the scoring service returns. Do not reword without the product
+ * owner's approval: the rubric is the source of truth.
+ */
+export const CAPABILITY_COPY: Record<string, string> = {
+  "Protected matching":
+    "Identify records shared across parties without transferring raw identifiers to the other party.",
+  "Re-identification risk remediation":
+    "Measure how dataset combination could reveal a person or sensitive attribute, then reduce that risk before release.",
+  "De-identification":
+    "Transform sensitive records so directly identifying values are not exposed during the approved workflow.",
+  "Data minimization":
+    "Limit collection, processing, and disclosure to fields required for the documented purpose.",
+  "Governance policy execution":
+    "Turn approved purpose, access, retention, and deletion rules into enforceable workflow controls and evidence.",
+};
+
 export type DataType = keyof typeof DATA_TYPE_LABELS;
 export type Purpose = keyof typeof PURPOSE_LABELS;
 export type YesNo = "yes" | "no";
