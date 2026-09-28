@@ -28,7 +28,7 @@ Reviewed build: the assessment flow on `SCRUM-17-accessibility`, which includes 
 | 5 | Medium | The whole workspace was `aria-live="polite"`, so screen readers re-announced the entire panel on every change | Replaced with a visually hidden `role="status"` that announces "Step N of 4: <name>" and the assessing state; focus still moves to the step heading |
 | 6 | Medium | The step heading had `outline: none` on focus, so keyboard users got no indicator when focus moved there | Suppressed only for `:focus:not(:focus-visible)`, with a visible ring for `:focus-visible` |
 | 7 | Low | At phone width the character counter collided with the help text under the textarea | `.field-meta` stacks below 560&nbsp;px |
-| 8 | Low | The Karlsgate panel listed capability names only ("Protected matching · De-identification"), with no explanation | Each capability now shows its approved plain-language description from the rubric |
+| 8 | Low | The capability panel listed capability names only ("Protected matching · De-identification"), with no explanation | Each capability now shows its approved plain-language description from the rubric |
 
 All eight are fixed on this branch. No high-severity issues remain open for the demo.
 
