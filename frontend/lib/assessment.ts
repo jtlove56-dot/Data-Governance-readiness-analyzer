@@ -28,7 +28,7 @@ export const QUESTION_LABELS = {
 } as const;
 
 /**
- * Approved plain-language copy for each capability, quoted from
+ * Approved plain-language copy for each privacy-preserving capability, quoted from
  * docs/risk-scoring-rubric-v1.0.md (SCRUM-6). Keyed by the capability
  * label the scoring service returns. Do not reword without the product
  * owner's approval: the rubric is the source of truth.

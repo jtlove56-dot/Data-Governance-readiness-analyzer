@@ -17,7 +17,7 @@ Executed against the merged `dev` build (PR #7 and #8 included) on 27 September 
 | Score | 50 (14 + 18 + 12 + 6 per rubric v1.0) | **50** |
 | Level | MEDIUM | **MEDIUM** |
 | Guidance | Proceed only after controls and review | As expected |
-| Karlsgate fit | Protected matching offered | **Protected matching, data minimization, governance policy execution** (3 controls, each with its approved description) |
+| Capability fit | Protected matching offered | **Protected matching, data minimization, governance policy execution** (3 controls, each with its approved description) |
 | Safeguards | Base set | **5 recommendations** |
 | Report | PDF downloads | As expected |
 
@@ -50,7 +50,7 @@ Executed against the merged `dev` build (PR #7 and #8 included) on 27 September 
 | Score | 16 (14 + 2) | **16** |
 | Level | LOW | **LOW** |
 | Guidance | Standard safeguards likely sufficient | As expected |
-| Karlsgate fit | Only the always-applicable controls | As expected |
+| Capability fit | Only the always-applicable controls | As expected |
 
 **Completed without instructions:** yes. This scenario confirms a low-risk case is not over-flagged.
 
