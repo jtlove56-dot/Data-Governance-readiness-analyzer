@@ -161,7 +161,7 @@ export function AssessmentWizard() {
     <main>
       <a className="skip-link" href="#assessment">Skip to the assessment</a>
       <header className="masthead">
-        <a className="brand" href="#top" aria-label="Karlsgate home">KARLSGATE</a>
+        <a className="brand" href="#top" aria-label="Data Governance Readiness Analyzer home">DATA GOVERNANCE</a>
         <span className="edition">READINESS / 01</span>
       </header>
 
@@ -280,13 +280,9 @@ export function AssessmentWizard() {
                 {result.recommendations.map((item, index) => <li key={item}><span>{String(index + 1).padStart(2, "0")}</span><p>{item}</p></li>)}
               </ol>
               <div className="capability-panel">
-                <p className="section-number">KARLSGATE CAPABILITY FIT</p>
-                <h3>Controls that fit this use case</h3>
-                <ul className="capability-list">
-                  {result.capabilities.map((capability) => (
-                    <li key={capability}><b>{capability}</b><p>{CAPABILITY_COPY[capability] ?? ""}</p></li>
-                  ))}
-                </ul>
+                <p className="section-number">PRIVACY-PRESERVING CAPABILITY FIT</p>
+                <h3>{result.capabilities.join(" · ")}</h3>
+                <p>These controls can be applied without requiring raw identifiers to be exposed to another party.</p>
               </div>
               {result.limitations.length > 0 && <div className="limitations"><h3>Specialist review required</h3>{result.limitations.map((item) => <p key={item}>{item}</p>)}</div>}
               <details className="summary"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Assessed</dt><dd>{new Date(result.assessedAt).toLocaleString()}</dd></div></dl></details>

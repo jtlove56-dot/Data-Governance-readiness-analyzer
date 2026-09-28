@@ -82,7 +82,7 @@ export function buildReportModel(
 
   if (result.capabilities.length) {
     sections.push({
-      heading: "Karlsgate capability fit",
+      heading: "Privacy-preserving capability fit",
       kind: "list",
       items: result.capabilities,
     });

@@ -77,8 +77,7 @@ Apply to every assessment.
 
 - [ ] Product owner approves thresholds and decision language.
 - [ ] Privacy/legal approves regulated-data limitations.
-- [ ] Karlsgate product owner approves capability copy and applicability rules.
+- [ ] Product owner approves capability copy and applicability rules.
 - [ ] Engineering confirms frontend and backend implementations remain equivalent.
 
 Any approved change requires a new version of this document plus matching test fixtures in both applications.
-

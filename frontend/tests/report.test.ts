@@ -32,7 +32,7 @@ describe("report model", () => {
       "Risk assessment",
       "Contributing risk factors",
       "Recommended safeguards",
-      "Karlsgate capability fit",
+      "Privacy-preserving capability fit",
       "Specialist review required",
       "Disclaimer",
     ]);
