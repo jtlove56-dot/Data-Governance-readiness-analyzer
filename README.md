@@ -6,7 +6,7 @@ A guided, plain-language assessment for identifying privacy and governance risks
 
 - `frontend/` — Next.js App Router, React, TypeScript, and Tailwind CSS
 - `backend/` — FastAPI assessment and scoring service
-- `docs/` — versioned scoring rubric, capability language, deployment guidance, [data handling and retention](docs/data-handling.md), and the [accessibility review](docs/accessibility-review.md)
+- `docs/` — versioned scoring rubric, capability language, deployment guidance, [data handling and retention](docs/data-handling.md), the [accessibility review](docs/accessibility-review.md), and the [usability scenarios](docs/usability-scenarios.md)
 - `.github/workflows/ci.yml` — frontend and backend quality gates
 
 ## Local development

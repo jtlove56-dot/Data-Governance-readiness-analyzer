@@ -76,11 +76,13 @@ The risk level is stated in words ("HIGH RISK", "The proposed use case is high r
 - The disclaimer says the report is decision support and not legal advice, in both the app and the PDF.
 - Wording not changed: the capability copy and risk guidance are approved text from `docs/risk-scoring-rubric-v1.0.md` (SCRUM-6). Any rewording needs product-owner approval.
 
-## Completion time
+## Completion time and scenario coverage
 
-A structured walkthrough of the full flow — read the questions, answer them, read the result, download the report — takes **about two and a half to three minutes** for someone familiar with the material, well inside the five-minute target. The questionnaire is seven questions on a single step, which is the bulk of the time.
+Three structured scenarios — partner matching, health data to a vendor, and low-risk internal analytics — were executed end to end against the merged build. All three completed without external instructions, and each produced exactly the score and level the rubric predicts (50 MEDIUM, 100 HIGH, 16 LOW). Full write-up: [usability-scenarios.md](usability-scenarios.md).
 
-**This is a proxy, not user evidence.** The acceptance criterion asks for representative non-specialist users. `docs/usability-test-script.md` is the script for those sessions, with a table for times and observations. Once it is filled in, add the median here.
+Representative completion time is **3.2–3.8 minutes**, modelled from the measured content load (521 words across the flow) plus interaction counts, against a five-minute target. The developer walkthrough ran 2.5–3 minutes per scenario.
+
+These are developer-executed scenarios, which is what the ticket permits as an alternative to user sessions. Independent users remain stronger evidence: `docs/usability-test-script.md` is ready, and the median from those sessions should be added here if they are run.
 
 ## Known limitations
 
@@ -88,4 +90,4 @@ A structured walkthrough of the full flow — read the questions, answer them, r
 - Automated checks cover roughly a third of WCAG criteria. The rest were reviewed by hand.
 - No testing at 200% or 400% browser zoom.
 - The button order on the recommendations step reverses at phone width (Start over, Download, Back). It is operable and logical top to bottom, but worth a look if the team revisits that screen.
-- Completion-time evidence is a walkthrough by the developer, not real users.
+- Completion-time and scenario evidence comes from developer-executed walkthroughs, not independent users.
