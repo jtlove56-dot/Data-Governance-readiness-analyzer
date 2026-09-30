@@ -78,6 +78,6 @@ Apply to every assessment.
 - [ ] Product owner approves thresholds and decision language.
 - [ ] Privacy/legal approves regulated-data limitations.
 - [ ] Product owner approves capability copy and applicability rules.
-- [ ] Engineering confirms frontend and backend implementations remain equivalent.
+- [ ] Engineering confirms the backend implementation matches this approved rubric.
 
-Any approved change requires a new version of this document plus matching test fixtures in both applications.
+Any approved change requires a new version of this document, matching backend scoring tests, and updated frontend API-response fixtures where the output contract changes.

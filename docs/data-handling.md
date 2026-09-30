@@ -4,10 +4,9 @@ Implements SCRUM-16. The analyzer assesses potentially sensitive use cases, so i
 
 ## Decision
 
-v1.0 is **stateless**: assessments are not retained, and there are no accounts. This follows the recorded Sprint 1 position in [deployment.md](deployment.md) ("keeps assessments in the browser and does not persist them until the authentication/storage product decision is approved").
+v1.0 is **stateless**: assessments are not retained on the server, and there are no accounts or database. See [deployment.md](deployment.md).
 
 - No authentication is implemented for v1.0.
-- The `supabase/migrations` `assessments` table (row-level security, owner-only access) stays unused. Enabling it requires an approved persistence decision, authentication, and an update to this document and to the in-app notice.
 
 ## Field inventory
 
@@ -28,7 +27,7 @@ The API still accepts `description` so older clients keep working, but it is nev
 ## Data flow
 
 1. The person types into the wizard. Input is held in React state and mirrored to `sessionStorage` (`governance-assessment-draft-v2`) so a refresh does not lose work.
-2. On **Assess risk**, the browser sends only the scored fields to `POST /assessments` in the request body. Nothing goes in the URL or query string. When the API is unreachable, the same rules run locally in the browser.
+2. On **Assess risk**, the browser sends only the scored fields to `POST /assessments` in the request body. Nothing goes in the URL or query string. FastAPI is the only scoring implementation; if it is unavailable, the browser displays an error and does not produce a score.
 3. The API scores the request in memory and returns the result with `Cache-Control: no-store`. Nothing is written to a database.
 4. The PDF report is generated entirely in the browser (jsPDF) and downloaded with a generic filename (`data-governance-assessment.pdf`). It is never uploaded, and it carries no author or keyword metadata and no internal rule identifiers. See `frontend/lib/report.ts`.
 
@@ -55,8 +54,7 @@ Constants live in `frontend/lib/session.ts` (`IDLE_TIMEOUT_MS`).
 
 - **Vercel (frontend):** static page. Input stays in the browser.
 - **Render (FastAPI):** Uvicorn access logs contain the client address, method, path (`/assessments`), and status, never request bodies. Do not enable request-body logging or debug middleware in staging or production.
-- **Supabase:** not used for assessment content in v1.0. Keep the service-role key off the browser and out of the repo (see [deployment.md](deployment.md)).
 
 ## What we tell users
 
-The describe step and footer say that answers stay in the browser tab, are not saved on our servers, and are cleared on close, on start over, or after 30 minutes of inactivity. If retention changes, update that copy in `frontend/components/AssessmentWizard.tsx` in the same change.
+The describe step explains that the description stays in the browser, questionnaire answers are sent for scoring without server storage, and the draft is cleared on close, on start over, or after 30 minutes of inactivity. If retention changes, update that copy in `frontend/components/AssessmentWizard.tsx` in the same change.

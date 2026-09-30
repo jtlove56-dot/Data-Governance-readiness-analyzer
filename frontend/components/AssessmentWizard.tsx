@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AssessmentInput,
   AssessmentResult,
+  AssessmentServiceError,
   DATA_TYPE_LABELS,
   DataType,
   EMPTY_INPUT,
@@ -21,7 +22,7 @@ import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } 
 
 const STEPS = ["Describe", "Answer questions", "Assessment", "Recommendations"] as const;
 const RETENTION_NOTICE =
-  "Your answers stay in this browser tab only. They are not saved on our servers and are cleared when you close the tab, start over, or are inactive for 30 minutes.";
+  "Your description stays in this browser tab. Questionnaire answers are sent to our service to calculate your score and are not saved on our servers. Your draft is cleared when you close the tab, start over, or are inactive for 30 minutes.";
 
 function Choice({ selected, children, onClick }: { selected: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
@@ -60,18 +61,39 @@ export function AssessmentWizard() {
   const [downloading, setDownloading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const mainHeading = useRef<HTMLHeadingElement>(null);
+  const pendingAssessment = useRef<AbortController | null>(null);
+  const pendingReport = useRef<AbortController | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
+
+  const cancelPendingWork = useCallback(() => {
+    pendingAssessment.current?.abort();
+    pendingAssessment.current = null;
+    pendingReport.current?.abort();
+    pendingReport.current = null;
+    setLoading(false);
+    setDownloading(false);
+  }, []);
+
+  useEffect(() => () => {
+    pendingAssessment.current?.abort();
+    pendingReport.current?.abort();
+  }, []);
 
   useEffect(() => {
     purgeLegacyDrafts();
     const restored = loadDraft();
-    if (!restored) return;
-    const restoreDraft = window.setTimeout(() => setInput(restored), 0);
+    const restoreDraft = window.setTimeout(() => {
+      if (restored) setInput(restored);
+      setDraftReady(true);
+    }, 0);
     return () => window.clearTimeout(restoreDraft);
   }, []);
 
   useEffect(() => {
-    saveDraft(input);
-  }, [input]);
+    if (!draftReady) return;
+    if (input === EMPTY_INPUT) clearDraft();
+    else saveDraft(input);
+  }, [input, draftReady]);
 
   // Clear the draft after a period of inactivity, even if the tab stays open.
   useEffect(() => {
@@ -79,11 +101,13 @@ export function AssessmentWizard() {
     const restart = () => {
       window.clearTimeout(idle);
       idle = window.setTimeout(() => {
+        cancelPendingWork();
         clearDraft();
         setInput(EMPTY_INPUT);
         setResult(null);
         setStep(0);
         setMaxReached(0);
+        setReportError(null);
         setError("Your session expired after 30 minutes of inactivity, so your answers were cleared.");
       }, IDLE_TIMEOUT_MS);
     };
@@ -94,22 +118,25 @@ export function AssessmentWizard() {
       window.clearTimeout(idle);
       events.forEach((name) => window.removeEventListener(name, restart));
     };
-  }, []);
+  }, [cancelPendingWork]);
 
   useEffect(() => {
     mainHeading.current?.focus();
   }, [step]);
 
   const update = <K extends keyof AssessmentInput>(key: K, value: AssessmentInput[K]) => {
+    cancelPendingWork();
     setInput((current) => ({ ...current, [key]: value }));
     if (result) {
       setResult(null);
       setMaxReached((current) => Math.min(current, 1));
     }
     setError(null);
+    setReportError(null);
   };
 
   const moveTo = (nextStep: number) => {
+    cancelPendingWork();
     if (nextStep === 1) {
       const message = validateDescription(input.description);
       if (message) { setError(message); return; }
@@ -120,40 +147,58 @@ export function AssessmentWizard() {
   };
 
   const assess = async () => {
+    if (pendingAssessment.current) return;
     const message = validateQuestions(input);
     if (message) { setError(message); return; }
+    const controller = new AbortController();
+    pendingAssessment.current = controller;
     setLoading(true);
     setError(null);
     try {
-      const response = await requestAssessment(input);
+      const response = await requestAssessment(input, controller.signal);
+      if (controller.signal.aborted || pendingAssessment.current !== controller) return;
       setResult(response);
       moveTo(2);
-    } catch {
-      setError("The assessment service could not complete this request. Check your answers and try again.");
+    } catch (failure) {
+      if (controller.signal.aborted || pendingAssessment.current !== controller) return;
+      setError(failure instanceof AssessmentServiceError && failure.status === 422
+        ? "The assessment service could not accept these answers. Review them and try again."
+        : "The assessment service is unavailable. Your answers are still in this tab—please try again.");
     } finally {
-      setLoading(false);
+      if (pendingAssessment.current === controller) {
+        pendingAssessment.current = null;
+        setLoading(false);
+      }
     }
   };
 
   const reset = () => {
+    cancelPendingWork();
     setInput(EMPTY_INPUT);
     setResult(null);
     setStep(0);
     setMaxReached(0);
     setError(null);
+    setReportError(null);
     clearDraft();
   };
 
   const download = async () => {
-    if (!result) return;
+    if (!result || pendingReport.current) return;
+    const controller = new AbortController();
+    pendingReport.current = controller;
     setDownloading(true);
     setReportError(null);
     try {
-      await downloadAssessmentReport(input, result);
+      await downloadAssessmentReport(input, result, controller.signal);
     } catch {
+      if (controller.signal.aborted || pendingReport.current !== controller) return;
       setReportError("The report could not be generated. Your assessment is still here—please try again.");
     } finally {
-      setDownloading(false);
+      if (pendingReport.current === controller) {
+        pendingReport.current = null;
+        setDownloading(false);
+      }
     }
   };
 

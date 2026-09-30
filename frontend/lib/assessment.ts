@@ -93,6 +93,22 @@ export const EMPTY_INPUT: AssessmentInput = {
   purpose: "matching",
 };
 
+const BINARY_FIELDS = ["externalAccess", "rawExchange", "dataMovement", "combined", "secondaryUse"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function isAssessmentInput(value: unknown): value is AssessmentInput {
+  if (!isRecord(value)) return false;
+  return typeof value.description === "string" && value.description.length <= 1000
+    && Array.isArray(value.dataTypes)
+    && value.dataTypes.length <= Object.keys(DATA_TYPE_LABELS).length
+    && value.dataTypes.every((item) => typeof item === "string" && Object.hasOwn(DATA_TYPE_LABELS, item))
+    && BINARY_FIELDS.every((field) => ["", "yes", "no"].includes(value[field] as string))
+    && typeof value.purpose === "string" && Object.hasOwn(PURPOSE_LABELS, value.purpose);
+}
+
 export function validateDescription(value: string): string | null {
   const length = value.trim().length;
   if (length === 0) return "Describe the proposed data use case before continuing.";
@@ -103,180 +119,42 @@ export function validateDescription(value: string): string | null {
 
 export function validateQuestions(input: AssessmentInput): string | null {
   if (input.dataTypes.length === 0) return "Select at least one type of information.";
-  if (!input.externalAccess || !input.rawExchange || !input.dataMovement || !input.combined || !input.secondaryUse) {
+  if (BINARY_FIELDS.some((field) => input[field] !== "yes" && input[field] !== "no")) {
     return "Answer each Yes or No question before assessing the use case.";
   }
   return null;
 }
 
-/**
- * Local fallback engine, kept equivalent to the backend rule table in
- * backend/app/scoring/rules.py (rulesVersion "1.0"). Used only when the
- * scoring API is unreachable; see requestAssessment below.
- */
-
 const SCHEMA_VERSION = "1.0";
-const RULES_VERSION = "1.0";
+export const ASSESSMENT_TIMEOUT_MS = 15_000;
 
-const HIGH_SENSITIVITY_TYPES: readonly DataType[] = ["gov", "health", "financial"];
-const DIRECT_IDENTIFIER_TYPES: readonly DataType[] = ["names", "emails", "phone"];
-
-type Rule = {
-  id: string;
-  category: string;
-  label: string;
-  points: number;
-  applies: (input: AssessmentInput) => boolean;
-};
-
-type Capability = {
-  id: string;
-  label: string;
-  applies: (input: AssessmentInput) => boolean;
-  recommendation?: string;
-};
-
-type Limitation = {
-  id: string;
-  copy: string;
-  applies: (input: AssessmentInput) => boolean;
-};
-
-function hasHighSensitivity(input: AssessmentInput): boolean {
-  return input.dataTypes.some((item) => HIGH_SENSITIVITY_TYPES.includes(item));
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function hasDirectIdentifiersOnly(input: AssessmentInput): boolean {
-  return !hasHighSensitivity(input) && input.dataTypes.some((item) => DIRECT_IDENTIFIER_TYPES.includes(item));
+function isRiskFactor(value: unknown): value is RiskFactor {
+  if (!isRecord(value)) return false;
+  return typeof value.ruleId === "string" && typeof value.category === "string"
+    && typeof value.label === "string" && typeof value.points === "number"
+    && Number.isInteger(value.points) && value.points >= 0;
 }
 
-function usesProtectedMatching(input: AssessmentInput): boolean {
-  return input.externalAccess === "yes" && (input.rawExchange === "yes" || input.purpose === "matching");
+function isAssessmentResult(value: unknown): value is AssessmentResult {
+  if (!isRecord(value)) return false;
+  return value.schemaVersion === SCHEMA_VERSION && typeof value.rulesVersion === "string"
+    && typeof value.score === "number" && Number.isInteger(value.score) && value.score >= 0 && value.score <= 100
+    && ["LOW", "MEDIUM", "HIGH"].includes(value.level as string)
+    && typeof value.guidance === "string"
+    && Array.isArray(value.factors) && value.factors.every(isRiskFactor)
+    && [value.recommendations, value.capabilities, value.limitations].every(isStringArray)
+    && typeof value.assessedAt === "string" && Number.isFinite(Date.parse(value.assessedAt));
 }
 
-const RULES: Rule[] = [
-  { id: "DATA_SENSITIVITY_HIGH", category: "data_sensitivity", label: "Regulated or highly sensitive information", points: 28, applies: hasHighSensitivity },
-  { id: "DATA_SENSITIVITY_DIRECT", category: "data_sensitivity", label: "Direct personal identifiers", points: 14, applies: hasDirectIdentifiersOnly },
-  { id: "EXTERNAL_ACCESS", category: "access", label: "Access by another organization", points: 18, applies: (input) => input.externalAccess === "yes" },
-  { id: "RAW_EXCHANGE", category: "access", label: "Raw identifier exchange", points: 18, applies: (input) => input.rawExchange === "yes" },
-  { id: "DATA_MOVEMENT", category: "movement", label: "Data leaves its controlled environment", points: 12, applies: (input) => input.dataMovement === "yes" },
-  { id: "COMBINED_REIDENTIFICATION", category: "reidentification", label: "Re-identification potential from data combination", points: 12, applies: (input) => input.combined === "yes" },
-  { id: "SECONDARY_USE", category: "purpose", label: "Reuse beyond the stated purpose", points: 12, applies: (input) => input.secondaryUse === "yes" },
-  { id: "PURPOSE_ANALYTICS", category: "purpose", label: "Intended use: Internal analytics", points: 2, applies: (input) => input.purpose === "analytics" },
-  { id: "PURPOSE_RESEARCH", category: "purpose", label: "Intended use: Research", points: 4, applies: (input) => input.purpose === "research" },
-  { id: "PURPOSE_MATCHING", category: "purpose", label: "Intended use: Customer or record matching", points: 6, applies: (input) => input.purpose === "matching" },
-  { id: "PURPOSE_OTHER", category: "purpose", label: "Intended use: Other", points: 6, applies: (input) => input.purpose === "other" },
-  { id: "PURPOSE_MARKETING", category: "purpose", label: "Intended use: Marketing or advertising", points: 8, applies: (input) => input.purpose === "marketing" },
-  { id: "PURPOSE_AI", category: "purpose", label: "Intended use: AI model training or development", points: 10, applies: (input) => input.purpose === "ai" },
-];
-
-// Priority order: protected matching, then re-identification remediation,
-// then de-identification, then the two controls that always apply.
-const CAPABILITIES: Capability[] = [
-  {
-    id: "PROTECTED_MATCHING",
-    label: "Protected matching",
-    applies: usesProtectedMatching,
-    recommendation: "Use protected matching instead of transferring raw identifiers.",
-  },
-  {
-    id: "REID_REMEDIATION",
-    label: "Re-identification risk remediation",
-    applies: (input) => input.combined === "yes",
-    recommendation: "Measure and remediate re-identification risk before combining datasets.",
-  },
-  {
-    id: "DEIDENTIFICATION",
-    label: "De-identification",
-    applies: hasHighSensitivity,
-    recommendation: "De-identify sensitive records before they leave the originating system.",
-  },
-  { id: "DATA_MINIMIZATION", label: "Data minimization", applies: () => true },
-  { id: "GOVERNANCE_EXECUTION", label: "Governance policy execution", applies: () => true },
-];
-
-const LIMITATIONS: Limitation[] = [
-  {
-    id: "HIPAA_REVIEW",
-    copy: "HIPAA applicability and required agreements need specialist review; this MVP does not determine compliance.",
-    applies: (input) => input.dataTypes.includes("health"),
-  },
-  {
-    id: "PCI_REVIEW",
-    copy: "PCI DSS scope depends on the exact account data involved; this MVP does not determine compliance.",
-    applies: (input) => input.dataTypes.includes("financial"),
-  },
-];
-
-const BASE_RECOMMENDATIONS = [
-  "Limit access to named roles and review permissions regularly.",
-  "Collect and share only the fields required for the approved purpose.",
-  "Set retention, deletion, and incident-response responsibilities before launch.",
-  "Record the approved purpose, data owner, and control evidence in the governance register.",
-];
-
-const EXTRA_RECOMMENDATIONS: { id: string; copy: string; applies: (input: AssessmentInput) => boolean }[] = [
-  {
-    id: "SECONDARY_USE_GATE",
-    copy: "Create a separate approval gate for any secondary use.",
-    applies: (input) => input.secondaryUse === "yes",
-  },
-];
-
-const THRESHOLDS = { lowMax: 29, mediumMax: 59 };
-
-const GUIDANCE_BY_LEVEL: Record<RiskLevel, string> = {
-  LOW: "Standard safeguards and an accountable owner are likely sufficient.",
-  MEDIUM: "Proceed only after the listed controls and an accountable review are in place.",
-  HIGH: "Pause implementation until privacy, security, and governance controls are approved.",
-};
-
-function levelFor(score: number): RiskLevel {
-  if (score <= THRESHOLDS.lowMax) return "LOW";
-  if (score <= THRESHOLDS.mediumMax) return "MEDIUM";
-  return "HIGH";
-}
-
-function unique<T>(items: T[]): T[] {
-  return [...new Set(items)];
-}
-
-export function assessLocally(input: AssessmentInput, assessedAt = new Date().toISOString()): AssessmentResult {
-  const factors: RiskFactor[] = RULES.filter((rule) => rule.applies(input)).map((rule) => ({
-    ruleId: rule.id,
-    category: rule.category,
-    label: rule.label,
-    points: rule.points,
-  }));
-
-  const rawScore = factors.reduce((total, factor) => total + factor.points, 0);
-  const score = Math.min(100, rawScore);
-  const level = levelFor(score);
-  const guidance = GUIDANCE_BY_LEVEL[level];
-
-  const applicableCapabilities = CAPABILITIES.filter((capability) => capability.applies(input));
-  const capabilities = unique(applicableCapabilities.map((capability) => capability.label));
-  const recommendations = unique([
-    ...applicableCapabilities
-      .filter((capability): capability is Capability & { recommendation: string } => Boolean(capability.recommendation))
-      .map((capability) => capability.recommendation),
-    ...BASE_RECOMMENDATIONS,
-    ...EXTRA_RECOMMENDATIONS.filter((extra) => extra.applies(input)).map((extra) => extra.copy),
-  ]);
-  const limitations = LIMITATIONS.filter((limitation) => limitation.applies(input)).map((limitation) => limitation.copy);
-
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    rulesVersion: RULES_VERSION,
-    score,
-    level,
-    guidance,
-    factors,
-    recommendations,
-    capabilities,
-    limitations,
-    assessedAt,
-  };
+export class AssessmentServiceError extends Error {
+  constructor(public readonly status: number) {
+    super(`Assessment service returned ${status}`);
+    this.name = "AssessmentServiceError";
+  }
 }
 
 /**
@@ -288,27 +166,37 @@ export function toScoringPayload(input: AssessmentInput): Omit<AssessmentInput, 
   return { dataTypes, externalAccess, rawExchange, dataMovement, combined, secondaryUse, purpose };
 }
 
-export async function requestAssessment(input: AssessmentInput): Promise<AssessmentResult> {
+export async function requestAssessment(input: AssessmentInput, signal?: AbortSignal): Promise<AssessmentResult> {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!baseUrl) return assessLocally(input);
+  if (!baseUrl) {
+    throw new Error("Assessment service is not configured");
+  }
 
-  let response: Response;
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted) abort();
+  const timeout = setTimeout(abort, ASSESSMENT_TIMEOUT_MS);
   try {
-    response = await fetch(`${baseUrl.replace(/\/$/, "")}/assessments`, {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/assessments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...toScoringPayload(input) }),
       cache: "no-store",
+      signal: controller.signal,
     });
-  } catch {
-    return assessLocally(input);
-  }
+    if (!response.ok) throw new AssessmentServiceError(response.status);
 
-  if (!response.ok) throw new Error(`Assessment service returned ${response.status}`);
-
-  try {
-    return await response.json() as AssessmentResult;
-  } catch {
-    throw new Error("Assessment service returned an invalid response");
+    let result: unknown;
+    try {
+      result = await response.json();
+    } catch {
+      throw new Error("Assessment service returned an invalid response");
+    }
+    if (!isAssessmentResult(result)) throw new Error("Assessment service returned an invalid response");
+    return result;
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener("abort", abort);
   }
 }

@@ -228,7 +228,9 @@ export const REPORT_FILENAME = "data-governance-assessment.pdf";
 export async function downloadAssessmentReport(
   input: AssessmentInput,
   result: AssessmentResult,
+  signal?: AbortSignal,
 ): Promise<void> {
+  if (signal?.aborted) return;
   const doc = await renderAssessmentPdf(buildReportModel(input, result));
-  doc.save(REPORT_FILENAME);
+  if (!signal?.aborted) doc.save(REPORT_FILENAME);
 }
