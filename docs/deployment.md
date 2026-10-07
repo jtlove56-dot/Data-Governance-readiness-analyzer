@@ -30,6 +30,7 @@ Every pull request receives a preview URL when Vercel’s Git integration is ena
 The root `render.yaml` defines a Docker-based FastAPI service. Set this environment variable in the host dashboard:
 
 - `ALLOWED_ORIGINS`: comma-separated exact frontend origins.
+- `MAX_REQUEST_BYTES`: maximum accepted request-body size; defaults to `16384` bytes. Keep the platform proxy limit at or below this value when possible.
 
 The service exposes `/health`, `/version`, `/docs`, and `POST /assessments`.
 

@@ -69,6 +69,15 @@ export type RiskFactor = {
   points: number;
 };
 
+export type RecommendationDetail = {
+  id: string;
+  priority: number;
+  title: string;
+  action: string;
+  rationale: string;
+  riskFactorIds: string[];
+};
+
 export type AssessmentResult = {
   schemaVersion: string;
   rulesVersion: string;
@@ -76,7 +85,7 @@ export type AssessmentResult = {
   level: RiskLevel;
   guidance: string;
   factors: RiskFactor[];
-  recommendations: string[];
+  recommendationDetails: RecommendationDetail[];
   capabilities: string[];
   limitations: string[];
   assessedAt: string;
@@ -101,10 +110,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function isAssessmentInput(value: unknown): value is AssessmentInput {
   if (!isRecord(value)) return false;
+  const dataTypes = value.dataTypes;
   return typeof value.description === "string" && value.description.length <= 1000
-    && Array.isArray(value.dataTypes)
-    && value.dataTypes.length <= Object.keys(DATA_TYPE_LABELS).length
-    && value.dataTypes.every((item) => typeof item === "string" && Object.hasOwn(DATA_TYPE_LABELS, item))
+    && Array.isArray(dataTypes)
+    && dataTypes.length <= Object.keys(DATA_TYPE_LABELS).length
+    && dataTypes.every((item) => typeof item === "string" && Object.hasOwn(DATA_TYPE_LABELS, item))
+    && new Set(dataTypes).size === dataTypes.length
     && BINARY_FIELDS.every((field) => ["", "yes", "no"].includes(value[field] as string))
     && typeof value.purpose === "string" && Object.hasOwn(PURPOSE_LABELS, value.purpose);
 }
@@ -125,11 +136,15 @@ export function validateQuestions(input: AssessmentInput): string | null {
   return null;
 }
 
-const SCHEMA_VERSION = "1.0";
+const SCHEMA_VERSION = "2.0";
 export const ASSESSMENT_TIMEOUT_MS = 15_000;
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function hasUniqueValues(values: string[]): boolean {
+  return new Set(values).size === values.length;
 }
 
 function isRiskFactor(value: unknown): value is RiskFactor {
@@ -139,15 +154,47 @@ function isRiskFactor(value: unknown): value is RiskFactor {
     && Number.isInteger(value.points) && value.points >= 0;
 }
 
+function isRecommendationDetail(value: unknown): value is RecommendationDetail {
+  return isRecord(value)
+    && typeof value.id === "string" && value.id.length > 0
+    && typeof value.priority === "number" && Number.isInteger(value.priority) && value.priority >= 1
+    && typeof value.title === "string" && value.title.length > 0
+    && typeof value.action === "string" && value.action.length > 0
+    && typeof value.rationale === "string" && value.rationale.length > 0
+    && isStringArray(value.riskFactorIds) && value.riskFactorIds.length > 0;
+}
+
 function isAssessmentResult(value: unknown): value is AssessmentResult {
   if (!isRecord(value)) return false;
-  return value.schemaVersion === SCHEMA_VERSION && typeof value.rulesVersion === "string"
+  const basicShape = value.schemaVersion === SCHEMA_VERSION && typeof value.rulesVersion === "string"
     && typeof value.score === "number" && Number.isInteger(value.score) && value.score >= 0 && value.score <= 100
     && ["LOW", "MEDIUM", "HIGH"].includes(value.level as string)
     && typeof value.guidance === "string"
     && Array.isArray(value.factors) && value.factors.every(isRiskFactor)
-    && [value.recommendations, value.capabilities, value.limitations].every(isStringArray)
+    && [value.capabilities, value.limitations].every(isStringArray)
+    && Array.isArray(value.recommendationDetails) && value.recommendationDetails.every(isRecommendationDetail)
     && typeof value.assessedAt === "string" && Number.isFinite(Date.parse(value.assessedAt));
+  if (!basicShape) return false;
+
+  const factors = value.factors as RiskFactor[];
+  const factorIdList = factors.map((factor) => factor.ruleId);
+  if (!hasUniqueValues(factorIdList)) return false;
+  const factorIds = new Set(factorIdList);
+  const details = value.recommendationDetails as RecommendationDetail[];
+  const capabilities = value.capabilities as string[];
+  const score = value.score as number;
+  const level = value.level as RiskLevel;
+  const rawScore = factors.reduce((sum, factor) => sum + factor.points, 0);
+  const expectedLevel: RiskLevel = score <= 29 ? "LOW" : score <= 59 ? "MEDIUM" : "HIGH";
+
+  return score === Math.min(100, rawScore)
+    && level === expectedLevel
+    && hasUniqueValues(details.map((detail) => detail.id))
+    && hasUniqueValues(capabilities)
+    && capabilities.every((capability) => Object.hasOwn(CAPABILITY_COPY, capability))
+    && details.every((detail, index) => detail.priority === index + 1
+      && hasUniqueValues(detail.riskFactorIds)
+      && detail.riskFactorIds.every((ruleId) => factorIds.has(ruleId)));
 }
 
 export class AssessmentServiceError extends Error {

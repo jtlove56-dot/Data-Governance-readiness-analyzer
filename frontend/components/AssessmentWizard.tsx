@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AssessmentInput,
   AssessmentResult,
@@ -18,6 +18,7 @@ import {
   validateQuestions,
 } from "@/lib/assessment";
 import { downloadAssessmentReport } from "@/lib/report";
+import { riskColor } from "@/lib/risk-color";
 import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
 
 const STEPS = ["Describe", "Answer questions", "Assessment", "Recommendations"] as const;
@@ -64,6 +65,10 @@ export function AssessmentWizard() {
   const pendingAssessment = useRef<AbortController | null>(null);
   const pendingReport = useRef<AbortController | null>(null);
   const [draftReady, setDraftReady] = useState(false);
+  const factorLabelsById = useMemo(
+    () => new Map(result?.factors.map((factor) => [factor.ruleId, factor.label]) ?? []),
+    [result],
+  );
 
   const cancelPendingWork = useCallback(() => {
     pendingAssessment.current?.abort();
@@ -76,7 +81,9 @@ export function AssessmentWizard() {
 
   useEffect(() => () => {
     pendingAssessment.current?.abort();
+    pendingAssessment.current = null;
     pendingReport.current?.abort();
+    pendingReport.current = null;
   }, []);
 
   useEffect(() => {
@@ -298,12 +305,22 @@ export function AssessmentWizard() {
           )}
 
           {step === 2 && result && (
-            <div className="step-panel">
+            <div
+              className="step-panel risk-result"
+              style={{
+                "--risk-color": riskColor(result.score),
+                "--risk-position": `${result.score}%`,
+              } as React.CSSProperties}
+            >
               <p className="section-number">03 / ASSESSMENT</p>
               <h2 ref={mainHeading} tabIndex={-1}>The proposed use case is <em>{result.level.toLowerCase()} risk.</em></h2>
-              <div className={`score ${result.level.toLowerCase()}`}>
+              <div className="score">
                 <span className="score-number">{result.score}</span><span className="score-total">/ 100</span>
                 <div><b>{result.level} RISK</b><p>{result.guidance}</p></div>
+              </div>
+              <div className="risk-scale" aria-hidden="true">
+                <div className="risk-scale-track"><i /></div>
+                <div className="risk-scale-labels"><span>Low risk</span><span>High risk</span></div>
               </div>
               <div className="rule" />
               <h3>What drives this score</h3>
@@ -316,24 +333,53 @@ export function AssessmentWizard() {
           )}
 
           {step === 3 && result && (
-            <div className="step-panel">
+            <div
+              className="step-panel recommendation-result"
+              style={{ "--risk-color": riskColor(result.score) } as React.CSSProperties}
+            >
               <p className="section-number">04 / RECOMMENDATIONS</p>
               <h2 ref={mainHeading} tabIndex={-1}>Controls before approval.</h2>
               <p className="lede">Use this record to begin privacy, security, and business-owner review.</p>
-              <h3>Recommended protections</h3>
-              <ol className="recommendation-list">
-                {result.recommendations.map((item, index) => <li key={item}><span>{String(index + 1).padStart(2, "0")}</span><p>{item}</p></li>)}
-              </ol>
-              <div className="capability-panel">
-                <p className="section-number">PRIVACY-PRESERVING CAPABILITY FIT</p>
-                <h3>Controls that fit this use case</h3>
-                <p>These controls can be applied without requiring raw identifiers to be exposed to another party.</p>
-                <ul className="capability-list">
-                  {result.capabilities.map((capability) => (
-                    <li key={capability}><b>{capability}</b><p>{CAPABILITY_COPY[capability] ?? ""}</p></li>
-                  ))}
-                </ul>
+              <div className="recommendation-outcome">
+                <b>{result.level} RISK · {result.score}/100</b>
+                <p>{result.guidance}</p>
               </div>
+              <h3>Recommended protections</h3>
+              {result.recommendationDetails.length > 0 ? (
+                <ol className="recommendation-list">
+                  {result.recommendationDetails.map((item) => {
+                    const factorLabels = item.riskFactorIds.flatMap((ruleId) => {
+                      const label = factorLabelsById.get(ruleId);
+                      return label ? [label] : [];
+                    });
+                    return (
+                      <li key={item.id}>
+                        <span>{String(item.priority).padStart(2, "0")}</span>
+                        <div>
+                          <h4>{item.title}</h4>
+                          <p>{item.action}</p>
+                          <p className="recommendation-rationale"><b>Why this applies:</b> {item.rationale}</p>
+                          <p className="recommendation-trace"><b>Triggered by:</b> {factorLabels.join(", ")}</p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : (
+                <p className="empty-state">No tailored safeguards were returned. Apply standard access, minimization, retention, and governance controls before proceeding.</p>
+              )}
+              {result.capabilities.length > 0 && (
+                <div className="capability-panel">
+                  <p className="section-number">PRIVACY-ENHANCING CAPABILITY FIT</p>
+                  <h3>Applicable privacy-enhancing controls</h3>
+                  <p>Only capabilities whose documented applicability rules are satisfied are shown.</p>
+                  <ul className="capability-list">
+                    {result.capabilities.map((capability) => (
+                      <li key={capability}><b>{capability}</b><p>{CAPABILITY_COPY[capability] ?? ""}</p></li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {result.limitations.length > 0 && <div className="limitations"><h3>Specialist review required</h3>{result.limitations.map((item) => <p key={item}>{item}</p>)}</div>}
               <details className="summary"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Assessed</dt><dd>{new Date(result.assessedAt).toLocaleString()}</dd></div></dl></details>
               {reportError && <p className="error" role="alert">{reportError}</p>}

@@ -22,7 +22,7 @@ v1.0 is **stateless**: assessments are not retained on the server, and there are
 | `purpose` | `PURPOSE_*` rules and protected-matching fit | Yes | This tab's `sessionStorage` only |
 | `schemaVersion` | API contract versioning | Yes | No |
 
-The API still accepts `description` so older clients keep working, but it is never scored, logged, or returned (`exclude=True`), and the frontend no longer sends it.
+The API schema does not accept `description`; it remains exclusively in the browser for the on-screen record and local PDF report.
 
 ## Data flow
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 class Settings:
     environment: str = os.getenv("APP_ENV", "development")
     version: str = os.getenv("APP_VERSION", "0.1.0")
+    max_request_bytes: int = int(os.getenv("MAX_REQUEST_BYTES", str(16 * 1024)))
     allowed_origins: tuple[str, ...] = tuple(
         origin.strip()
         for origin in os.getenv(

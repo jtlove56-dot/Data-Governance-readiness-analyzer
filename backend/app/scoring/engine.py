@@ -10,7 +10,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.scoring.models import SCHEMA_VERSION, AssessmentRequest, AssessmentResponse, RiskFactor
+from app.scoring.models import (
+    SCHEMA_VERSION,
+    AssessmentRequest,
+    AssessmentResponse,
+    RecommendationDetail,
+    RiskFactor,
+)
 from app.scoring.rules import RuleSet, get_ruleset
 
 
@@ -39,11 +45,19 @@ def score_assessment(
     applicable_capabilities = [cap for cap in ruleset.capabilities if cap.applies(request)]
     capabilities = _unique(cap.label for cap in applicable_capabilities)
 
-    recommendations = [cap.recommendation for cap in applicable_capabilities if cap.recommendation]
-    recommendations.extend(ruleset.base_recommendations)
-    recommendations.extend(
-        extra.copy for extra in ruleset.extra_recommendations if extra.applies(request)
-    )
+    fired_rule_ids = {factor.ruleId for factor in factors}
+    recommendation_rules = [rule for rule in ruleset.recommendations if rule.applies(request)]
+    recommendation_details = [
+        RecommendationDetail(
+            id=rule.id,
+            priority=priority,
+            title=rule.title,
+            action=rule.action,
+            rationale=rule.rationale,
+            riskFactorIds=[rule_id for rule_id in rule.risk_factor_ids if rule_id in fired_rule_ids],
+        )
+        for priority, rule in enumerate(recommendation_rules, start=1)
+    ]
 
     limitations = [lim.copy for lim in ruleset.limitations if lim.applies(request)]
 
@@ -54,7 +68,7 @@ def score_assessment(
         level=level,
         guidance=guidance,
         factors=factors,
-        recommendations=_unique(recommendations),
+        recommendationDetails=recommendation_details,
         capabilities=capabilities,
         limitations=limitations,
         assessedAt=assessed_at or datetime.now(timezone.utc).isoformat(),

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "2.0"
 
 DataType = Literal["names", "emails", "phone", "gov", "health", "financial"]
 Purpose = Literal["matching", "ai", "analytics", "marketing", "research", "other"]
@@ -19,17 +19,21 @@ class AssessmentRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schemaVersion: Literal["1.0"] = SCHEMA_VERSION
-    # Not used by the rubric. The frontend no longer sends it (SCRUM-16);
-    # accepted only so older clients keep working, then discarded.
-    description: Optional[str] = Field(default=None, max_length=1000, exclude=True)
-    dataTypes: list[DataType] = Field(min_length=1)
+    schemaVersion: Literal["2.0"] = SCHEMA_VERSION
+    dataTypes: list[DataType] = Field(min_length=1, max_length=6)
     externalAccess: YesNo
     rawExchange: YesNo
     dataMovement: YesNo
     combined: YesNo
     secondaryUse: YesNo
     purpose: Purpose
+
+    @field_validator("dataTypes")
+    @classmethod
+    def data_types_must_be_unique(cls, value: list[DataType]) -> list[DataType]:
+        if len(value) != len(set(value)):
+            raise ValueError("data types must be unique")
+        return value
 
 
 class RiskFactor(BaseModel):
@@ -41,6 +45,17 @@ class RiskFactor(BaseModel):
     points: int
 
 
+class RecommendationDetail(BaseModel):
+    """A prioritized safeguard with an explanation and factor traceability."""
+
+    id: str
+    priority: int = Field(ge=1)
+    title: str
+    action: str
+    rationale: str
+    riskFactorIds: list[str] = Field(min_length=1)
+
+
 class AssessmentResponse(BaseModel):
     """Deterministic scoring output with full attribution."""
 
@@ -50,7 +65,7 @@ class AssessmentResponse(BaseModel):
     level: RiskLevel
     guidance: str
     factors: list[RiskFactor]
-    recommendations: list[str]
+    recommendationDetails: list[RecommendationDetail]
     capabilities: list[str]
     limitations: list[str]
     assessedAt: str
