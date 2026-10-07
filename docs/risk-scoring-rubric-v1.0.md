@@ -66,6 +66,23 @@ Approved MVP copy: “Turn approved purpose, access, retention, and deletion rul
 
 Apply to every assessment.
 
+## Safeguard priority and traceability
+
+The assessment response returns safeguards in the order below. Conditional safeguards come first because they address a specific exposure; the four baseline safeguards remain available for every result. Each returned safeguard includes a concise rationale and only the IDs of scoring factors that actually fired.
+
+| Priority | Safeguard | Applicability | Traceable scoring factors |
+| ---: | --- | --- | --- |
+| 1 | Protect cross-party matching | External access plus raw exchange or record matching | External access, raw exchange, record matching |
+| 2 | Reduce combination risk | Datasets will be combined | Re-identification potential |
+| 3 | De-identify sensitive records | Health, financial, or government identifiers | High data sensitivity and data movement when applicable |
+| 4 | Gate any secondary use | Reuse beyond the stated purpose | Secondary use |
+| 5 | Restrict and review access | Every assessment | Access, raw exchange, movement, and intended use when applicable |
+| 6 | Minimize the data | Every assessment | Data sensitivity and intended use |
+| 7 | Set lifecycle responsibilities | Every assessment | Movement, secondary use, and intended use when applicable |
+| 8 | Record the decision | Every assessment | All identified factors |
+
+API schema v2.0 uses `recommendationDetails` as the single structured, ordered representation consumed by the application and report.
+
 ## v1.0 regulated-data limitations
 
 - Health information: the tool flags specialist review but does not determine HIPAA covered-entity status, business-associate obligations, authorization, or Safe Harbor/Expert Determination compliance.

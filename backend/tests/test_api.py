@@ -1,3 +1,5 @@
+from time import perf_counter
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -9,7 +11,6 @@ client = TestClient(app)
 
 def sample_payload(**overrides):
     payload = {
-        "description": "Match customer email addresses with a partner for campaign measurement.",
         "dataTypes": ["emails"],
         "externalAccess": "yes",
         "rawExchange": "no",
@@ -33,7 +34,7 @@ def test_assessment_returns_transparent_score_with_attribution():
     body = response.json()
     assert body["score"] == 38
     assert body["level"] == "MEDIUM"
-    assert body["schemaVersion"] == "1.0"
+    assert body["schemaVersion"] == "2.0"
     assert body["rulesVersion"] == "1.0"
     assert "Protected matching" in body["capabilities"]
     assert {factor["ruleId"] for factor in body["factors"]} == {
@@ -41,6 +42,11 @@ def test_assessment_returns_transparent_score_with_attribution():
         "EXTERNAL_ACCESS",
         "PURPOSE_MATCHING",
     }
+    assert "recommendations" not in body
+    assert [item["priority"] for item in body["recommendationDetails"]] == list(
+        range(1, len(body["recommendationDetails"]) + 1)
+    )
+    assert all(item["rationale"] and item["riskFactorIds"] for item in body["recommendationDetails"])
 
 
 def test_high_risk_regulated_use_includes_limitations():
@@ -68,7 +74,7 @@ def test_invalid_input_returns_clear_client_error_without_echoing_input():
     body = response.json()
     assert body["error"] == "invalid_input"
     assert "requestId" in body
-    assert "description" in body["fields"]
+    assert "body" in body["fields"]
     assert "dataTypes" in body["fields"]
     # The invalid free-text value must never be echoed back to the client.
     assert "sensitive" not in response.text
@@ -82,6 +88,16 @@ def test_unsupported_purpose_is_rejected():
 def test_unsupported_extra_field_is_rejected():
     response = client.post("/assessments", json=sample_payload(unexpectedField="value"))
     assert response.status_code == 422
+
+
+def test_oversized_request_is_rejected_before_validation():
+    responses = [
+        client.post("/assessments", content=b"x" * 20_000),
+        client.post("/assessments", content=iter([b"x" * 10_000, b"x" * 10_000])),
+    ]
+
+    assert [response.status_code for response in responses] == [413, 413]
+    assert all(response.json()["error"] == "request_too_large" for response in responses)
 
 
 @pytest.mark.parametrize("origin", ["http://localhost:3000", "http://127.0.0.1:3000"])
@@ -114,24 +130,32 @@ def test_user_controlled_extra_field_name_is_not_echoed_or_logged(caplog):
     assert submitted_field_name not in caplog.text
 
 
-def test_scores_without_description():
-    payload = sample_payload()
-    del payload["description"]
-    response = client.post("/assessments", json=payload)
-    assert response.status_code == 200
-    assert response.json()["score"] == 38
-
-
 def test_assessment_responses_are_not_cached():
     response = client.post("/assessments", json=sample_payload())
     assert response.headers["cache-control"] == "no-store"
 
 
 def test_scoring_logs_exclude_questionnaire_input(caplog):
-    description = "Share patient records from Riverside Clinic with a vendor."
     with caplog.at_level("INFO", logger="governance.scoring"):
-        client.post("/assessments", json=sample_payload(description=description, dataTypes=["health"]))
+        client.post("/assessments", json=sample_payload(dataTypes=["health"]))
     logged = "\n".join(JsonFormatter().format(record) for record in caplog.records)
     assert "assessment_scored" in logged
-    assert "Riverside" not in logged
+    assert '"level": "INFO"' in logged
+    assert '"riskLevel": "MEDIUM"' in logged
     assert "health" not in logged
+
+
+def test_assessment_response_time_is_under_two_seconds_for_demo_conditions():
+    """25 sequential in-process requests model the single-user demo workload."""
+    durations = []
+    for _ in range(25):
+        started = perf_counter()
+        response = client.post("/assessments", json=sample_payload())
+        durations.append(perf_counter() - started)
+        assert response.status_code == 200
+
+    ordered = sorted(durations)
+    p95 = ordered[int(len(ordered) * 0.95) - 1]
+    maximum = max(durations)
+    print(f"assessment latency: p95={p95 * 1000:.2f}ms max={maximum * 1000:.2f}ms requests={len(durations)}")
+    assert maximum < 2.0, f"slowest assessment took {maximum:.3f}s; target is under 2.000s"

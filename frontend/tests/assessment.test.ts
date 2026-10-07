@@ -46,7 +46,7 @@ describe("assessment client", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("https://api.example.test/assessments");
 
     const request = fetchMock.mock.calls[0][1] as RequestInit;
-    expect(JSON.parse(request.body as string)).toMatchObject({ schemaVersion: "1.0" });
+    expect(JSON.parse(request.body as string)).toMatchObject({ schemaVersion: "2.0" });
   });
 
   it("never sends the free-text description to the assessment API", async () => {
@@ -88,11 +88,12 @@ describe("assessment client", () => {
   it.each([
     null,
     {},
-    { ...assessmentResult, schemaVersion: "2.0" },
+    { ...assessmentResult, schemaVersion: "1.0" },
     { ...assessmentResult, score: 101 },
     { ...assessmentResult, level: "UNKNOWN" },
     { ...assessmentResult, factors: [null] },
-    { ...assessmentResult, recommendations: "invalid" },
+    { ...assessmentResult, recommendationDetails: [{ ...assessmentResult.recommendationDetails[0], riskFactorIds: ["UNKNOWN_RULE"] }] },
+    { ...assessmentResult, recommendationDetails: [{ ...assessmentResult.recommendationDetails[0], priority: 2 }] },
     { ...assessmentResult, assessedAt: "not a date" },
   ])("rejects a malformed API response: %j", async (body) => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");

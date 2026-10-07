@@ -35,7 +35,7 @@ describe("report model", () => {
       "Risk assessment",
       "Contributing risk factors",
       "Recommended safeguards",
-      "Privacy-preserving capability fit",
+      "Privacy-enhancing capability fit",
       "Specialist review required",
       "Disclaimer",
     ]);
@@ -52,7 +52,13 @@ describe("report model", () => {
     expect(flatten()).toContain(input.description);
     expect(flatten()).toContain("Email addresses, Health information");
     expect(flatten()).toContain("Research");
-    result.recommendations.forEach((item) => expect(flatten()).toContain(item));
+    result.recommendationDetails.forEach((item) => expect(flatten()).toContain(item.action));
+    result.recommendationDetails.forEach((item) => {
+      expect(flatten()).toContain(item.rationale);
+      item.riskFactorIds.forEach((ruleId) => {
+        expect(flatten()).toContain(result.factors.find((factor) => factor.ruleId === ruleId)?.label);
+      });
+    });
     result.factors.forEach((factor) => expect(flatten()).toContain(factor.label));
   });
 

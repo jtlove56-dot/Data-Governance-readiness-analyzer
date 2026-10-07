@@ -204,6 +204,13 @@ describe("assessment flow accessibility", () => {
       expect(CAPABILITY_COPY[label]).toBeTruthy();
       expect(panel.textContent).toContain(CAPABILITY_COPY[label]);
     });
+
+    expect(screen.getByText(/HIGH RISK · 100\/100/i)).toBeTruthy();
+    assessmentResult.recommendationDetails.forEach((recommendation) => {
+      expect(screen.getByText(recommendation.title)).toBeTruthy();
+      expect(screen.getByText(recommendation.rationale, { exact: false })).toBeTruthy();
+    });
+    expect(screen.getAllByText(/Triggered by:/i)).toHaveLength(assessmentResult.recommendationDetails.length);
   });
 
   it("does not rely on colour alone to convey the risk level", async () => {

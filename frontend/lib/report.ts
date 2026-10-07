@@ -1,6 +1,7 @@
 import {
   AssessmentInput,
   AssessmentResult,
+  CAPABILITY_COPY,
   DATA_TYPE_LABELS,
   PURPOSE_LABELS,
   QUESTION_LABELS,
@@ -38,6 +39,7 @@ export function buildReportModel(
   input: AssessmentInput,
   result: AssessmentResult,
 ): ReportModel {
+  const factorLabels = new Map(result.factors.map((factor) => [factor.ruleId, factor.label]));
   const sections: ReportSection[] = [
     { heading: "Use case", kind: "paragraph", body: input.description.trim() },
     {
@@ -76,15 +78,18 @@ export function buildReportModel(
       heading: "Recommended safeguards",
       kind: "list",
       ordered: true,
-      items: result.recommendations,
+      items: result.recommendationDetails.map((item) => {
+        const triggers = item.riskFactorIds.map((ruleId) => factorLabels.get(ruleId)).filter(Boolean);
+        return `${item.action} Why this applies: ${item.rationale} Triggered by: ${triggers.join(", ")}.`;
+      }),
     },
   ];
 
   if (result.capabilities.length) {
     sections.push({
-      heading: "Privacy-preserving capability fit",
+      heading: "Privacy-enhancing capability fit",
       kind: "list",
-      items: result.capabilities,
+      items: result.capabilities.map((capability) => `${capability}: ${CAPABILITY_COPY[capability] ?? ""}`),
     });
   }
 

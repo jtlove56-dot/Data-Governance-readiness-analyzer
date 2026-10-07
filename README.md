@@ -7,6 +7,7 @@ A guided, plain-language assessment for identifying privacy and governance risks
 - `frontend/` — Next.js App Router, React, TypeScript, and Tailwind CSS; collects answers and renders backend results
 - `backend/` — FastAPI service and the single source of truth for assessment scoring
 - `docs/` — versioned scoring rubric, capability language, deployment guidance, [data handling and retention](docs/data-handling.md), the [accessibility review](docs/accessibility-review.md), and the [usability scenarios](docs/usability-scenarios.md)
+- [Scoring verification](docs/scoring-verification.md) — the SCRUM-14 correctness matrix, reproducible commands, performance conditions, results, and limitations
 - `.github/workflows/ci.yml` — frontend and backend quality gates
 
 ## Local development
@@ -47,6 +48,14 @@ npm run build
 ```bash
 cd backend
 pytest
+ruff check app tests
+```
+
+To reproduce the documented assessment response-time check:
+
+```bash
+cd backend
+./.venv/bin/pytest -q -s tests/test_api.py::test_assessment_response_time_is_under_two_seconds_for_demo_conditions
 ```
 
 ## Deployment

@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.logging_config import configure_logging, logger
+from app.request_limits import RequestBodyLimitMiddleware
 from app.scoring import AssessmentRequest, AssessmentResponse, score_assessment
 
 configure_logging()
@@ -16,6 +17,8 @@ app = FastAPI(
     description="Transparent rule-based privacy risk-scoring service.",
     version=settings.version,
 )
+
+app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_bytes)
 
 app.add_middleware(
     CORSMiddleware,
@@ -77,7 +80,7 @@ def create_assessment(payload: AssessmentRequest, response: Response) -> Assessm
                 "schemaVersion": result.schemaVersion,
                 "rulesVersion": result.rulesVersion,
                 "score": result.score,
-                "level": result.level,
+                "riskLevel": result.level,
                 "ruleIds": [factor.ruleId for factor in result.factors],
             }
         },
