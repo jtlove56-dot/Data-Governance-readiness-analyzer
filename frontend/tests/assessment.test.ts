@@ -119,4 +119,11 @@ describe("assessment rubric", () => {
 
     await expect(requestAssessment(baseline)).rejects.toThrow("Assessment service returned 422");
   });
+
+  it("does not silently label legacy API recommendations with a new mapping version", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
+    const legacy = { ...assessLocally(baseline), mappingVersion: undefined };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(legacy), { status: 200 })));
+    await expect(requestAssessment(baseline)).rejects.toThrow("invalid response");
+  });
 });

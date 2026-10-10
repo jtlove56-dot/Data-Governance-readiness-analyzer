@@ -43,6 +43,8 @@ describe("report model", () => {
     expect(flatten()).toContain(result.level);
     expect(flatten()).toContain(result.guidance);
     expect(model.meta).toContainEqual({ label: "Scoring rules version", value: result.rulesVersion });
+    expect(model.meta).toContainEqual({ label: "Recommendation mapping version", value: result.mappingVersion });
+    expect(model.meta).toContainEqual({ label: "Mapping approval", value: "Approved" });
   });
 
   it("carries the use case, every answer, and every recommendation", () => {
@@ -51,6 +53,8 @@ describe("report model", () => {
     expect(flatten()).toContain("Research");
     result.recommendations.forEach((item) => expect(flatten()).toContain(item));
     result.factors.forEach((factor) => expect(flatten()).toContain(factor.label));
+    result.karlsgateRecommendations.forEach((item) => expect(flatten()).toContain(item.text));
+    expect(flatten()).toContain("Relevant to:");
   });
 
   it("omits internal rule identifiers and categories", () => {

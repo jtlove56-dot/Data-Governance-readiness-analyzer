@@ -89,6 +89,10 @@ describe("assessment flow accessibility", () => {
 
     // Step 4: recommendations
     await screen.findByText(/controls before approval/i);
+    expect(screen.getByRole("heading", { name: "General safeguards" })).toBeTruthy();
+    expect(container.querySelector(".recommendation-reason")?.textContent).toMatch(/Relevant to:/);
+    expect(screen.getByText(/Recommendation mapping v1.1: stakeholder approved/)).toBeTruthy();
+    expect(screen.getByText("Recommendation mapping version")).toBeTruthy();
     await expectNoViolations(container);
   });
 

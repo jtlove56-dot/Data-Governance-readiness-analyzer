@@ -104,12 +104,15 @@ select { width: 100%; min-height: 50px; border: 1px solid var(--ink); border-rad
 .recommendation-list li { display: grid; grid-template-columns: 44px 1fr; padding: 17px 0; border-bottom: 1px solid var(--line); }
 .recommendation-list span { font-family: var(--font-mono), monospace; color: var(--brass-dark); font-size: 11px; }
 .recommendation-list p { margin: 0; }
+.recommendation-list .recommendation-reason { margin-top: 7px; color: var(--muted); font-size: 12px; }
+.recommendation-list > li > div { min-width: 0; overflow-wrap: anywhere; }
 .capability-panel { color: #fff; background: var(--ink); margin: 40px 0 24px; padding: 28px; }
 .capability-panel .section-number { color: #cfb47d; }
 .capability-panel h3 { font-size: 28px; line-height: 1.2; }
 .capability-list { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 16px; }
 .capability-list b { display: block; font-family: var(--font-mono), monospace; font-size: 11px; letter-spacing: .08em; color: #cfb47d; margin-bottom: 5px; }
 .capability-list p { margin: 0; color: #cfd2c9; font-size: 14px; line-height: 1.55; }
+.capability-list .recommendation-reason { margin-top: 7px; font-size: 12px; }
 .capability-panel > p:last-child { color: #cfd2c9; margin: 0; line-height: 1.6; }
 .limitations { border-left: 3px solid var(--danger); padding: 4px 0 4px 20px; margin: 26px 0; }
 .limitations h3 { color: var(--danger); font-size: 20px; }

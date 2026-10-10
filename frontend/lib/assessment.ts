@@ -1,3 +1,6 @@
+import { mapRecommendations, type RecommendationResult } from "./recommendations";
+export { CAPABILITY_COPY } from "./recommendations";
+
 export const DATA_TYPE_LABELS = {
   names: "Names",
   emails: "Email addresses",
@@ -27,25 +30,6 @@ export const QUESTION_LABELS = {
   purpose: "What is the intended use?",
 } as const;
 
-/**
- * Approved plain-language copy for each capability, quoted from
- * docs/risk-scoring-rubric-v1.0.md (SCRUM-6). Keyed by the capability
- * label the scoring service returns. Do not reword without the product
- * owner's approval: the rubric is the source of truth.
- */
-export const CAPABILITY_COPY: Record<string, string> = {
-  "Protected matching":
-    "Identify records shared across parties without transferring raw identifiers to the other party.",
-  "Re-identification risk remediation":
-    "Measure how dataset combination could reveal a person or sensitive attribute, then reduce that risk before release.",
-  "De-identification":
-    "Transform sensitive records so directly identifying values are not exposed during the approved workflow.",
-  "Data minimization":
-    "Limit collection, processing, and disclosure to fields required for the documented purpose.",
-  "Governance policy execution":
-    "Turn approved purpose, access, retention, and deletion rules into enforceable workflow controls and evidence.",
-};
-
 export type DataType = keyof typeof DATA_TYPE_LABELS;
 export type Purpose = keyof typeof PURPOSE_LABELS;
 export type YesNo = "yes" | "no";
@@ -69,7 +53,7 @@ export type RiskFactor = {
   points: number;
 };
 
-export type AssessmentResult = {
+export type AssessmentResult = RecommendationResult & {
   schemaVersion: string;
   rulesVersion: string;
   score: number;
@@ -129,13 +113,6 @@ type Rule = {
   applies: (input: AssessmentInput) => boolean;
 };
 
-type Capability = {
-  id: string;
-  label: string;
-  applies: (input: AssessmentInput) => boolean;
-  recommendation?: string;
-};
-
 type Limitation = {
   id: string;
   copy: string;
@@ -148,10 +125,6 @@ function hasHighSensitivity(input: AssessmentInput): boolean {
 
 function hasDirectIdentifiersOnly(input: AssessmentInput): boolean {
   return !hasHighSensitivity(input) && input.dataTypes.some((item) => DIRECT_IDENTIFIER_TYPES.includes(item));
-}
-
-function usesProtectedMatching(input: AssessmentInput): boolean {
-  return input.externalAccess === "yes" && (input.rawExchange === "yes" || input.purpose === "matching");
 }
 
 const RULES: Rule[] = [
@@ -170,31 +143,6 @@ const RULES: Rule[] = [
   { id: "PURPOSE_AI", category: "purpose", label: "Intended use: AI model training or development", points: 10, applies: (input) => input.purpose === "ai" },
 ];
 
-// Priority order: protected matching, then re-identification remediation,
-// then de-identification, then the two controls that always apply.
-const CAPABILITIES: Capability[] = [
-  {
-    id: "PROTECTED_MATCHING",
-    label: "Protected matching",
-    applies: usesProtectedMatching,
-    recommendation: "Use protected matching instead of transferring raw identifiers.",
-  },
-  {
-    id: "REID_REMEDIATION",
-    label: "Re-identification risk remediation",
-    applies: (input) => input.combined === "yes",
-    recommendation: "Measure and remediate re-identification risk before combining datasets.",
-  },
-  {
-    id: "DEIDENTIFICATION",
-    label: "De-identification",
-    applies: hasHighSensitivity,
-    recommendation: "De-identify sensitive records before they leave the originating system.",
-  },
-  { id: "DATA_MINIMIZATION", label: "Data minimization", applies: () => true },
-  { id: "GOVERNANCE_EXECUTION", label: "Governance policy execution", applies: () => true },
-];
-
 const LIMITATIONS: Limitation[] = [
   {
     id: "HIPAA_REVIEW",
@@ -205,21 +153,6 @@ const LIMITATIONS: Limitation[] = [
     id: "PCI_REVIEW",
     copy: "PCI DSS scope depends on the exact account data involved; this MVP does not determine compliance.",
     applies: (input) => input.dataTypes.includes("financial"),
-  },
-];
-
-const BASE_RECOMMENDATIONS = [
-  "Limit access to named roles and review permissions regularly.",
-  "Collect and share only the fields required for the approved purpose.",
-  "Set retention, deletion, and incident-response responsibilities before launch.",
-  "Record the approved purpose, data owner, and control evidence in the governance register.",
-];
-
-const EXTRA_RECOMMENDATIONS: { id: string; copy: string; applies: (input: AssessmentInput) => boolean }[] = [
-  {
-    id: "SECONDARY_USE_GATE",
-    copy: "Create a separate approval gate for any secondary use.",
-    applies: (input) => input.secondaryUse === "yes",
   },
 ];
 
@@ -237,10 +170,6 @@ function levelFor(score: number): RiskLevel {
   return "HIGH";
 }
 
-function unique<T>(items: T[]): T[] {
-  return [...new Set(items)];
-}
-
 export function assessLocally(input: AssessmentInput, assessedAt = new Date().toISOString()): AssessmentResult {
   const factors: RiskFactor[] = RULES.filter((rule) => rule.applies(input)).map((rule) => ({
     ruleId: rule.id,
@@ -254,15 +183,7 @@ export function assessLocally(input: AssessmentInput, assessedAt = new Date().to
   const level = levelFor(score);
   const guidance = GUIDANCE_BY_LEVEL[level];
 
-  const applicableCapabilities = CAPABILITIES.filter((capability) => capability.applies(input));
-  const capabilities = unique(applicableCapabilities.map((capability) => capability.label));
-  const recommendations = unique([
-    ...applicableCapabilities
-      .filter((capability): capability is Capability & { recommendation: string } => Boolean(capability.recommendation))
-      .map((capability) => capability.recommendation),
-    ...BASE_RECOMMENDATIONS,
-    ...EXTRA_RECOMMENDATIONS.filter((extra) => extra.applies(input)).map((extra) => extra.copy),
-  ]);
+  const mapped = mapRecommendations(factors.map((factor) => factor.ruleId), RULES_VERSION);
   const limitations = LIMITATIONS.filter((limitation) => limitation.applies(input)).map((limitation) => limitation.copy);
 
   return {
@@ -272,8 +193,9 @@ export function assessLocally(input: AssessmentInput, assessedAt = new Date().to
     level,
     guidance,
     factors,
-    recommendations,
-    capabilities,
+    ...mapped,
+    recommendations: mapped.generalSafeguards.map((item) => item.text),
+    capabilities: mapped.karlsgateRecommendations.map((item) => item.label),
     limitations,
     assessedAt,
   };
@@ -307,7 +229,13 @@ export async function requestAssessment(input: AssessmentInput): Promise<Assessm
   if (!response.ok) throw new Error(`Assessment service returned ${response.status}`);
 
   try {
-    return await response.json() as AssessmentResult;
+    const result = await response.json() as AssessmentResult;
+    // Do not attach this client's mapping version to recommendations from an older service.
+    if (!result.mappingVersion || !Array.isArray(result.generalSafeguards) ||
+        !Array.isArray(result.karlsgateRecommendations)) {
+      throw new Error("Assessment service is missing versioned recommendations");
+    }
+    return result;
   } catch {
     throw new Error("Assessment service returned an invalid response");
   }

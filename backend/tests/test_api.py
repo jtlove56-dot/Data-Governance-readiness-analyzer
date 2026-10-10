@@ -35,6 +35,12 @@ def test_assessment_returns_transparent_score_with_attribution():
     assert body["level"] == "MEDIUM"
     assert body["schemaVersion"] == "1.0"
     assert body["rulesVersion"] == "1.0"
+    assert body["mappingVersion"] == "1.1"
+    assert body["mappingApprovalStatus"] == "approved"
+    assert body["recommendations"] == [item["text"] for item in body["generalSafeguards"]]
+    matching = next(item for item in body["karlsgateRecommendations"] if item["id"] == "PROTECTED_MATCHING")
+    assert matching["conditionId"] == "EXTERNAL_AND_RAW_OR_MATCHING"
+    assert matching["factorIds"] == ["EXTERNAL_ACCESS", "PURPOSE_MATCHING"]
     assert "Protected matching" in body["capabilities"]
     assert {factor["ruleId"] for factor in body["factors"]} == {
         "DATA_SENSITIVITY_DIRECT",

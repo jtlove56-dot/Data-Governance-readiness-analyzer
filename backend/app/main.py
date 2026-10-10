@@ -76,6 +76,7 @@ def create_assessment(payload: AssessmentRequest, response: Response) -> Assessm
                 "requestId": request_id,
                 "schemaVersion": result.schemaVersion,
                 "rulesVersion": result.rulesVersion,
+                "mappingVersion": result.mappingVersion,
                 "score": result.score,
                 "level": result.level,
                 "ruleIds": [factor.ruleId for factor in result.factors],

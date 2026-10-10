@@ -41,7 +41,25 @@ class RiskFactor(BaseModel):
     points: int
 
 
-class AssessmentResponse(BaseModel):
+class SafeguardRecommendation(BaseModel):
+    id: str
+    text: str
+    factorIds: list[str]
+
+
+class KarlsgateRecommendation(SafeguardRecommendation):
+    label: str
+    conditionId: str
+
+
+class RecommendationResult(BaseModel):
+    mappingVersion: str
+    mappingApprovalStatus: Literal["pending", "approved"]
+    generalSafeguards: list[SafeguardRecommendation]
+    karlsgateRecommendations: list[KarlsgateRecommendation]
+
+
+class AssessmentResponse(RecommendationResult):
     """Deterministic scoring output with full attribution."""
 
     schemaVersion: str

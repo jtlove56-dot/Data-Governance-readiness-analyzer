@@ -5,6 +5,7 @@ import {
   PURPOSE_LABELS,
   QUESTION_LABELS,
 } from "./assessment";
+import { recommendationReason } from "./recommendations";
 
 /**
  * Assessment report (SCRUM-15).
@@ -76,15 +77,16 @@ export function buildReportModel(
       heading: "Recommended safeguards",
       kind: "list",
       ordered: true,
-      items: result.recommendations,
+      items: result.generalSafeguards.map((item) => `${item.text} ${recommendationReason(item, result.factors)}`),
     },
   ];
 
-  if (result.capabilities.length) {
+  if (result.karlsgateRecommendations.length) {
     sections.push({
       heading: "Karlsgate capability fit",
       kind: "list",
-      items: result.capabilities,
+      items: result.karlsgateRecommendations.map((item) =>
+        `${item.label}: ${item.text} ${recommendationReason(item, result.factors)}`),
     });
   }
 
@@ -103,6 +105,8 @@ export function buildReportModel(
     meta: [
       { label: "Assessed", value: formatAssessedAt(result.assessedAt) },
       { label: "Scoring rules version", value: result.rulesVersion },
+      { label: "Recommendation mapping version", value: result.mappingVersion },
+      { label: "Mapping approval", value: result.mappingApprovalStatus === "approved" ? "Approved" : "Stakeholder approval pending" },
     ],
     sections,
   };
