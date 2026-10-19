@@ -39,6 +39,7 @@ export function buildReportModel(
   input: AssessmentInput,
   result: AssessmentResult,
 ): ReportModel {
+  const factorLabels = new Map(result.factors.map((factor) => [factor.ruleId, factor.label]));
   const sections: ReportSection[] = [
     { heading: "Use case", kind: "paragraph", body: input.description.trim() },
     {
@@ -77,7 +78,10 @@ export function buildReportModel(
       heading: "Recommended safeguards",
       kind: "list",
       ordered: true,
-      items: result.generalSafeguards.map((item) => `${item.text} ${recommendationReason(item, result.factors)}`),
+      items: result.recommendationDetails.map((item) => {
+        const triggers = item.riskFactorIds.map((ruleId) => factorLabels.get(ruleId)).filter(Boolean);
+        return `${item.action} Why this applies: ${item.rationale} Triggered by: ${triggers.join(", ")}.`;
+      }),
     },
   ];
 
@@ -85,8 +89,7 @@ export function buildReportModel(
     sections.push({
       heading: "Karlsgate capability fit",
       kind: "list",
-      items: result.karlsgateRecommendations.map((item) =>
-        `${item.label}: ${item.text} ${recommendationReason(item, result.factors)}`),
+      items: result.karlsgateRecommendations.map((item) => `${item.label}: ${item.text} ${recommendationReason(item, result.factors)}`),
     });
   }
 
@@ -232,7 +235,9 @@ export const REPORT_FILENAME = "data-governance-assessment.pdf";
 export async function downloadAssessmentReport(
   input: AssessmentInput,
   result: AssessmentResult,
+  signal?: AbortSignal,
 ): Promise<void> {
+  if (signal?.aborted) return;
   const doc = await renderAssessmentPdf(buildReportModel(input, result));
-  doc.save(REPORT_FILENAME);
+  if (!signal?.aborted) doc.save(REPORT_FILENAME);
 }

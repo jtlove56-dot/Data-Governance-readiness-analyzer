@@ -73,8 +73,12 @@ def test_applicability_and_coverage_across_all_questionnaire_combinations():
         assert {factor for item in result.generalSafeguards for factor in item.factorIds} == factors
         assert all(set(item.factorIds) <= factors for item in result.karlsgateRecommendations)
         assert len({item.id for item in result.generalSafeguards}) == len(result.generalSafeguards)
-        assert result.recommendations == [item.text for item in result.generalSafeguards]
-        assert all("Karlsgate" not in text for text in result.recommendations)
+        actions = [item.action for item in result.recommendationDetails]
+        assert {item.text for item in result.generalSafeguards} <= set(actions)
+        assert all("Karlsgate" not in text for text in actions)
+        assert len(actions) == len(set(actions))
+        assert [item.priority for item in result.recommendationDetails] == list(range(1, len(actions) + 1))
+        assert all(set(item.riskFactorIds) <= factors for item in result.recommendationDetails)
 
 
 def test_no_specialist_capability_fit_keeps_general_controls():

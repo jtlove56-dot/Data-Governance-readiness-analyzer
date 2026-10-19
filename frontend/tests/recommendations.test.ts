@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { AssessmentInput, DATA_TYPE_LABELS, PURPOSE_LABELS, assessLocally, type YesNo } from "../lib/assessment";
+import { AssessmentInput, DATA_TYPE_LABELS, PURPOSE_LABELS, type YesNo } from "../lib/assessment";
 import { CAPABILITY_COPY, mapRecommendations, recommendationReason } from "../lib/recommendations";
 import catalog from "../lib/mappings/v1.1.json";
 
@@ -42,10 +42,13 @@ describe("versioned recommendation mapping", () => {
         for (let bits = 0; bits < 32; bits++) {
           const flags: YesNo[] = Array.from({ length: 5 }, (_, index) => bits & (1 << index) ? "yes" : "no");
           const [externalAccess, rawExchange, dataMovement, combined, secondaryUse] = flags;
-          const result = assessLocally({
-            description: "Test assessment.", dataTypes: [dataType], purpose,
-            externalAccess, rawExchange, dataMovement, combined, secondaryUse,
-          });
+          const factorIds = [
+            ["gov", "health", "financial"].includes(dataType) ? "DATA_SENSITIVITY_HIGH" : "DATA_SENSITIVITY_DIRECT",
+            ...[externalAccess, rawExchange, dataMovement, combined, secondaryUse].flatMap((flag, index) =>
+              flag === "yes" ? [["EXTERNAL_ACCESS", "RAW_EXCHANGE", "DATA_MOVEMENT", "COMBINED_REIDENTIFICATION", "SECONDARY_USE"][index]] : []),
+            `PURPOSE_${purpose.toUpperCase()}`,
+          ];
+          const result = mapRecommendations(factorIds, "1.0");
           const capabilities = result.karlsgateRecommendations.map((item) => item.id);
           expect(capabilities.includes("PROTECTED_MATCHING")).toBe(
             externalAccess === "yes" && (rawExchange === "yes" || purpose === "matching"),
@@ -53,10 +56,9 @@ describe("versioned recommendation mapping", () => {
           expect(capabilities.includes("REID_REMEDIATION")).toBe(combined === "yes");
           expect(capabilities.includes("DEIDENTIFICATION")).toBe(["gov", "health", "financial"].includes(dataType));
           expect(capabilities).toEqual(expect.arrayContaining(["DATA_MINIMIZATION", "GOVERNANCE_EXECUTION"]));
-          const factors = new Set(result.factors.map((factor) => factor.ruleId));
+          const factors = new Set(factorIds);
           factors.forEach((factor) => seenFactors.add(factor));
           expect(new Set(result.generalSafeguards.flatMap((item) => item.factorIds))).toEqual(factors);
-          expect(result.recommendations).toEqual(result.generalSafeguards.map((item) => item.text));
           expect(new Set(result.generalSafeguards.map((item) => item.id)).size).toBe(result.generalSafeguards.length);
         }
       }

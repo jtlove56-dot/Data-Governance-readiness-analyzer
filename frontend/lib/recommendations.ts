@@ -65,3 +65,29 @@ export function recommendationReason(
   const labels = factors.filter((factor) => item.factorIds.includes(factor.ruleId)).map((factor) => factor.label);
   return labels.length ? `Relevant to: ${labels.join("; ")}.` : "Baseline control for every assessment.";
 }
+
+/** Validate mapping provenance and copy without calculating a local risk score. */
+export function matchesRecommendationResult(
+  value: Record<string, unknown>, factorIds: string[], rulesVersion: string,
+): boolean {
+  let expected: RecommendationResult;
+  try {
+    expected = mapRecommendations(factorIds, rulesVersion);
+  } catch {
+    return false;
+  }
+  const matches = (actual: unknown, entry: SafeguardRecommendation): boolean => {
+    if (!actual || typeof actual !== "object" || Array.isArray(actual)) return false;
+    return Object.entries(entry).every(([key, field]) =>
+      JSON.stringify((actual as Record<string, unknown>)[key]) === JSON.stringify(field));
+  };
+  const general = value.generalSafeguards;
+  const capabilities = value.karlsgateRecommendations;
+  return value.mappingVersion === expected.mappingVersion
+    && value.mappingApprovalStatus === expected.mappingApprovalStatus
+    && Array.isArray(general) && general.length === expected.generalSafeguards.length
+    && general.every((item, index) => matches(item, expected.generalSafeguards[index]))
+    && Array.isArray(capabilities)
+    && capabilities.every((item) => expected.karlsgateRecommendations.some((entry) => matches(item, entry)))
+    && new Set(capabilities.map((item) => (item as KarlsgateRecommendation).id)).size === capabilities.length;
+}

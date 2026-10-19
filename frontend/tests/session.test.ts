@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_INPUT } from "../lib/assessment";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "../lib/session";
 
@@ -21,6 +21,8 @@ beforeEach(() => {
   local = new MemoryStorage();
 });
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("session-scoped draft storage", () => {
   it("round-trips a draft within the session", () => {
     saveDraft(draft, session);
@@ -30,8 +32,8 @@ describe("session-scoped draft storage", () => {
 
   it("discards a draft after the idle timeout", () => {
     saveDraft(draft, session, 0);
-    expect(loadDraft(session, IDLE_TIMEOUT_MS)).toEqual(draft);
-    expect(loadDraft(session, IDLE_TIMEOUT_MS + 1)).toBeNull();
+    expect(loadDraft(session, IDLE_TIMEOUT_MS - 1)).toEqual(draft);
+    expect(loadDraft(session, IDLE_TIMEOUT_MS)).toBeNull();
     expect(session.getItem(DRAFT_KEY)).toBeNull();
   });
 
@@ -57,5 +59,28 @@ describe("session-scoped draft storage", () => {
     const blocked = new MemoryStorage();
     blocked.setItem = () => { throw new DOMException("blocked", "SecurityError"); };
     expect(() => saveDraft(draft, blocked)).not.toThrow();
+  });
+
+  it.each([null, {}, { ...draft, dataTypes: null }, { ...draft, description: 42 }, { ...draft, purpose: "unknown" }])(
+    "discards an invalid draft: %j", (input) => {
+      session.setItem(DRAFT_KEY, JSON.stringify({ savedAt: 100, input }));
+      expect(loadDraft(session, 100)).toBeNull();
+      expect(session.getItem(DRAFT_KEY)).toBeNull();
+    },
+  );
+
+  it("discards timestamps in the future", () => {
+    saveDraft(draft, session, 101);
+    expect(loadDraft(session, 100)).toBeNull();
+  });
+
+  it("handles browser storage getters throwing before storage access", () => {
+    const blocked = () => { throw new DOMException("blocked", "SecurityError"); };
+    vi.spyOn(window, "sessionStorage", "get").mockImplementation(blocked);
+    vi.spyOn(window, "localStorage", "get").mockImplementation(blocked);
+    expect(() => saveDraft(draft)).not.toThrow();
+    expect(() => clearDraft()).not.toThrow();
+    expect(() => purgeLegacyDrafts()).not.toThrow();
+    expect(loadDraft()).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { mapRecommendations, type RecommendationResult } from "./recommendations";
+import { CAPABILITY_COPY, matchesRecommendationResult, type RecommendationResult } from "./recommendations";
 export { CAPABILITY_COPY } from "./recommendations";
 
 export const DATA_TYPE_LABELS = {
@@ -53,6 +53,15 @@ export type RiskFactor = {
   points: number;
 };
 
+export type RecommendationDetail = {
+  id: string;
+  priority: number;
+  title: string;
+  action: string;
+  rationale: string;
+  riskFactorIds: string[];
+};
+
 export type AssessmentResult = RecommendationResult & {
   schemaVersion: string;
   rulesVersion: string;
@@ -60,7 +69,7 @@ export type AssessmentResult = RecommendationResult & {
   level: RiskLevel;
   guidance: string;
   factors: RiskFactor[];
-  recommendations: string[];
+  recommendationDetails: RecommendationDetail[];
   capabilities: string[];
   limitations: string[];
   assessedAt: string;
@@ -77,6 +86,24 @@ export const EMPTY_INPUT: AssessmentInput = {
   purpose: "matching",
 };
 
+const BINARY_FIELDS = ["externalAccess", "rawExchange", "dataMovement", "combined", "secondaryUse"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function isAssessmentInput(value: unknown): value is AssessmentInput {
+  if (!isRecord(value)) return false;
+  const dataTypes = value.dataTypes;
+  return typeof value.description === "string" && value.description.length <= 1000
+    && Array.isArray(dataTypes)
+    && dataTypes.length <= Object.keys(DATA_TYPE_LABELS).length
+    && dataTypes.every((item) => typeof item === "string" && Object.hasOwn(DATA_TYPE_LABELS, item))
+    && new Set(dataTypes).size === dataTypes.length
+    && BINARY_FIELDS.every((field) => ["", "yes", "no"].includes(value[field] as string))
+    && typeof value.purpose === "string" && Object.hasOwn(PURPOSE_LABELS, value.purpose);
+}
+
 export function validateDescription(value: string): string | null {
   const length = value.trim().length;
   if (length === 0) return "Describe the proposed data use case before continuing.";
@@ -87,118 +114,81 @@ export function validateDescription(value: string): string | null {
 
 export function validateQuestions(input: AssessmentInput): string | null {
   if (input.dataTypes.length === 0) return "Select at least one type of information.";
-  if (!input.externalAccess || !input.rawExchange || !input.dataMovement || !input.combined || !input.secondaryUse) {
+  if (BINARY_FIELDS.some((field) => input[field] !== "yes" && input[field] !== "no")) {
     return "Answer each Yes or No question before assessing the use case.";
   }
   return null;
 }
 
-/**
- * Local fallback engine, kept equivalent to the backend rule table in
- * backend/app/scoring/rules.py (rulesVersion "1.0"). Used only when the
- * scoring API is unreachable; see requestAssessment below.
- */
+const SCHEMA_VERSION = "2.0";
+export const ASSESSMENT_TIMEOUT_MS = 15_000;
 
-const SCHEMA_VERSION = "1.0";
-const RULES_VERSION = "1.0";
-
-const HIGH_SENSITIVITY_TYPES: readonly DataType[] = ["gov", "health", "financial"];
-const DIRECT_IDENTIFIER_TYPES: readonly DataType[] = ["names", "emails", "phone"];
-
-type Rule = {
-  id: string;
-  category: string;
-  label: string;
-  points: number;
-  applies: (input: AssessmentInput) => boolean;
-};
-
-type Limitation = {
-  id: string;
-  copy: string;
-  applies: (input: AssessmentInput) => boolean;
-};
-
-function hasHighSensitivity(input: AssessmentInput): boolean {
-  return input.dataTypes.some((item) => HIGH_SENSITIVITY_TYPES.includes(item));
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function hasDirectIdentifiersOnly(input: AssessmentInput): boolean {
-  return !hasHighSensitivity(input) && input.dataTypes.some((item) => DIRECT_IDENTIFIER_TYPES.includes(item));
+function hasUniqueValues(values: string[]): boolean {
+  return new Set(values).size === values.length;
 }
 
-const RULES: Rule[] = [
-  { id: "DATA_SENSITIVITY_HIGH", category: "data_sensitivity", label: "Regulated or highly sensitive information", points: 28, applies: hasHighSensitivity },
-  { id: "DATA_SENSITIVITY_DIRECT", category: "data_sensitivity", label: "Direct personal identifiers", points: 14, applies: hasDirectIdentifiersOnly },
-  { id: "EXTERNAL_ACCESS", category: "access", label: "Access by another organization", points: 18, applies: (input) => input.externalAccess === "yes" },
-  { id: "RAW_EXCHANGE", category: "access", label: "Raw identifier exchange", points: 18, applies: (input) => input.rawExchange === "yes" },
-  { id: "DATA_MOVEMENT", category: "movement", label: "Data leaves its controlled environment", points: 12, applies: (input) => input.dataMovement === "yes" },
-  { id: "COMBINED_REIDENTIFICATION", category: "reidentification", label: "Re-identification potential from data combination", points: 12, applies: (input) => input.combined === "yes" },
-  { id: "SECONDARY_USE", category: "purpose", label: "Reuse beyond the stated purpose", points: 12, applies: (input) => input.secondaryUse === "yes" },
-  { id: "PURPOSE_ANALYTICS", category: "purpose", label: "Intended use: Internal analytics", points: 2, applies: (input) => input.purpose === "analytics" },
-  { id: "PURPOSE_RESEARCH", category: "purpose", label: "Intended use: Research", points: 4, applies: (input) => input.purpose === "research" },
-  { id: "PURPOSE_MATCHING", category: "purpose", label: "Intended use: Customer or record matching", points: 6, applies: (input) => input.purpose === "matching" },
-  { id: "PURPOSE_OTHER", category: "purpose", label: "Intended use: Other", points: 6, applies: (input) => input.purpose === "other" },
-  { id: "PURPOSE_MARKETING", category: "purpose", label: "Intended use: Marketing or advertising", points: 8, applies: (input) => input.purpose === "marketing" },
-  { id: "PURPOSE_AI", category: "purpose", label: "Intended use: AI model training or development", points: 10, applies: (input) => input.purpose === "ai" },
-];
-
-const LIMITATIONS: Limitation[] = [
-  {
-    id: "HIPAA_REVIEW",
-    copy: "HIPAA applicability and required agreements need specialist review; this MVP does not determine compliance.",
-    applies: (input) => input.dataTypes.includes("health"),
-  },
-  {
-    id: "PCI_REVIEW",
-    copy: "PCI DSS scope depends on the exact account data involved; this MVP does not determine compliance.",
-    applies: (input) => input.dataTypes.includes("financial"),
-  },
-];
-
-const THRESHOLDS = { lowMax: 29, mediumMax: 59 };
-
-const GUIDANCE_BY_LEVEL: Record<RiskLevel, string> = {
-  LOW: "Standard safeguards and an accountable owner are likely sufficient.",
-  MEDIUM: "Proceed only after the listed controls and an accountable review are in place.",
-  HIGH: "Pause implementation until privacy, security, and governance controls are approved.",
-};
-
-function levelFor(score: number): RiskLevel {
-  if (score <= THRESHOLDS.lowMax) return "LOW";
-  if (score <= THRESHOLDS.mediumMax) return "MEDIUM";
-  return "HIGH";
+function isRiskFactor(value: unknown): value is RiskFactor {
+  if (!isRecord(value)) return false;
+  return typeof value.ruleId === "string" && typeof value.category === "string"
+    && typeof value.label === "string" && typeof value.points === "number"
+    && Number.isInteger(value.points) && value.points >= 0;
 }
 
-export function assessLocally(input: AssessmentInput, assessedAt = new Date().toISOString()): AssessmentResult {
-  const factors: RiskFactor[] = RULES.filter((rule) => rule.applies(input)).map((rule) => ({
-    ruleId: rule.id,
-    category: rule.category,
-    label: rule.label,
-    points: rule.points,
-  }));
+function isRecommendationDetail(value: unknown): value is RecommendationDetail {
+  return isRecord(value)
+    && typeof value.id === "string" && value.id.length > 0
+    && typeof value.priority === "number" && Number.isInteger(value.priority) && value.priority >= 1
+    && typeof value.title === "string" && value.title.length > 0
+    && typeof value.action === "string" && value.action.length > 0
+    && typeof value.rationale === "string" && value.rationale.length > 0
+    && isStringArray(value.riskFactorIds) && value.riskFactorIds.length > 0;
+}
 
-  const rawScore = factors.reduce((total, factor) => total + factor.points, 0);
-  const score = Math.min(100, rawScore);
-  const level = levelFor(score);
-  const guidance = GUIDANCE_BY_LEVEL[level];
+function isAssessmentResult(value: unknown): value is AssessmentResult {
+  if (!isRecord(value)) return false;
+  const basicShape = value.schemaVersion === SCHEMA_VERSION && typeof value.rulesVersion === "string"
+    && typeof value.score === "number" && Number.isInteger(value.score) && value.score >= 0 && value.score <= 100
+    && ["LOW", "MEDIUM", "HIGH"].includes(value.level as string)
+    && typeof value.guidance === "string"
+    && Array.isArray(value.factors) && value.factors.every(isRiskFactor)
+    && [value.capabilities, value.limitations].every(isStringArray)
+    && Array.isArray(value.recommendationDetails) && value.recommendationDetails.every(isRecommendationDetail)
+    && typeof value.assessedAt === "string" && Number.isFinite(Date.parse(value.assessedAt));
+  if (!basicShape) return false;
 
-  const mapped = mapRecommendations(factors.map((factor) => factor.ruleId), RULES_VERSION);
-  const limitations = LIMITATIONS.filter((limitation) => limitation.applies(input)).map((limitation) => limitation.copy);
+  const factors = value.factors as RiskFactor[];
+  const factorIdList = factors.map((factor) => factor.ruleId);
+  if (!hasUniqueValues(factorIdList)) return false;
+  if (!matchesRecommendationResult(value, factorIdList, value.rulesVersion as string)) return false;
+  const mapped = value as unknown as RecommendationResult;
+  if (JSON.stringify(value.capabilities) !== JSON.stringify(mapped.karlsgateRecommendations.map((item) => item.label))) return false;
+  const factorIds = new Set(factorIdList);
+  const details = value.recommendationDetails as RecommendationDetail[];
+  const capabilities = value.capabilities as string[];
+  const score = value.score as number;
+  const level = value.level as RiskLevel;
+  const rawScore = factors.reduce((sum, factor) => sum + factor.points, 0);
+  const expectedLevel: RiskLevel = score <= 29 ? "LOW" : score <= 59 ? "MEDIUM" : "HIGH";
 
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    rulesVersion: RULES_VERSION,
-    score,
-    level,
-    guidance,
-    factors,
-    ...mapped,
-    recommendations: mapped.generalSafeguards.map((item) => item.text),
-    capabilities: mapped.karlsgateRecommendations.map((item) => item.label),
-    limitations,
-    assessedAt,
-  };
+  return score === Math.min(100, rawScore)
+    && level === expectedLevel
+    && hasUniqueValues(details.map((detail) => detail.id))
+    && hasUniqueValues(capabilities)
+    && capabilities.every((capability) => Object.hasOwn(CAPABILITY_COPY, capability))
+    && details.every((detail, index) => detail.priority === index + 1
+      && hasUniqueValues(detail.riskFactorIds)
+      && detail.riskFactorIds.every((ruleId) => factorIds.has(ruleId)));
+}
+
+export class AssessmentServiceError extends Error {
+  constructor(public readonly status: number) {
+    super(`Assessment service returned ${status}`);
+    this.name = "AssessmentServiceError";
+  }
 }
 
 /**
@@ -210,33 +200,37 @@ export function toScoringPayload(input: AssessmentInput): Omit<AssessmentInput, 
   return { dataTypes, externalAccess, rawExchange, dataMovement, combined, secondaryUse, purpose };
 }
 
-export async function requestAssessment(input: AssessmentInput): Promise<AssessmentResult> {
+export async function requestAssessment(input: AssessmentInput, signal?: AbortSignal): Promise<AssessmentResult> {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!baseUrl) return assessLocally(input);
+  if (!baseUrl) {
+    throw new Error("Assessment service is not configured");
+  }
 
-  let response: Response;
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted) abort();
+  const timeout = setTimeout(abort, ASSESSMENT_TIMEOUT_MS);
   try {
-    response = await fetch(`${baseUrl.replace(/\/$/, "")}/assessments`, {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/assessments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...toScoringPayload(input) }),
       cache: "no-store",
+      signal: controller.signal,
     });
-  } catch {
-    return assessLocally(input);
-  }
+    if (!response.ok) throw new AssessmentServiceError(response.status);
 
-  if (!response.ok) throw new Error(`Assessment service returned ${response.status}`);
-
-  try {
-    const result = await response.json() as AssessmentResult;
-    // Do not attach this client's mapping version to recommendations from an older service.
-    if (!result.mappingVersion || !Array.isArray(result.generalSafeguards) ||
-        !Array.isArray(result.karlsgateRecommendations)) {
-      throw new Error("Assessment service is missing versioned recommendations");
+    let result: unknown;
+    try {
+      result = await response.json();
+    } catch {
+      throw new Error("Assessment service returned an invalid response");
     }
+    if (!isAssessmentResult(result)) throw new Error("Assessment service returned an invalid response");
     return result;
-  } catch {
-    throw new Error("Assessment service returned an invalid response");
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener("abort", abort);
   }
 }

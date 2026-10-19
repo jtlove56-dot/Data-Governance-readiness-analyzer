@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AssessmentInput,
   AssessmentResult,
+  AssessmentServiceError,
   DATA_TYPE_LABELS,
   DataType,
   EMPTY_INPUT,
@@ -17,11 +18,12 @@ import {
 } from "@/lib/assessment";
 import { downloadAssessmentReport } from "@/lib/report";
 import { recommendationReason } from "@/lib/recommendations";
+import { riskColor } from "@/lib/risk-color";
 import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
 
 const STEPS = ["Describe", "Answer questions", "Assessment", "Recommendations"] as const;
 const RETENTION_NOTICE =
-  "Your answers stay in this browser tab only. They are not saved on our servers and are cleared when you close the tab, start over, or are inactive for 30 minutes.";
+  "Your description stays in this browser tab. Questionnaire answers are sent to our service to calculate your score and are not saved on our servers. Your draft is cleared when you close the tab, start over, or are inactive for 30 minutes.";
 
 function Choice({ selected, children, onClick }: { selected: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
@@ -60,18 +62,45 @@ export function AssessmentWizard() {
   const [downloading, setDownloading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const mainHeading = useRef<HTMLHeadingElement>(null);
+  const pendingAssessment = useRef<AbortController | null>(null);
+  const pendingReport = useRef<AbortController | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
+  const factorLabelsById = useMemo(
+    () => new Map(result?.factors.map((factor) => [factor.ruleId, factor.label]) ?? []),
+    [result],
+  );
+
+  const cancelPendingWork = useCallback(() => {
+    pendingAssessment.current?.abort();
+    pendingAssessment.current = null;
+    pendingReport.current?.abort();
+    pendingReport.current = null;
+    setLoading(false);
+    setDownloading(false);
+  }, []);
+
+  useEffect(() => () => {
+    pendingAssessment.current?.abort();
+    pendingAssessment.current = null;
+    pendingReport.current?.abort();
+    pendingReport.current = null;
+  }, []);
 
   useEffect(() => {
     purgeLegacyDrafts();
     const restored = loadDraft();
-    if (!restored) return;
-    const restoreDraft = window.setTimeout(() => setInput(restored), 0);
+    const restoreDraft = window.setTimeout(() => {
+      if (restored) setInput(restored);
+      setDraftReady(true);
+    }, 0);
     return () => window.clearTimeout(restoreDraft);
   }, []);
 
   useEffect(() => {
-    saveDraft(input);
-  }, [input]);
+    if (!draftReady) return;
+    if (input === EMPTY_INPUT) clearDraft();
+    else saveDraft(input);
+  }, [input, draftReady]);
 
   // Clear the draft after a period of inactivity, even if the tab stays open.
   useEffect(() => {
@@ -79,11 +108,13 @@ export function AssessmentWizard() {
     const restart = () => {
       window.clearTimeout(idle);
       idle = window.setTimeout(() => {
+        cancelPendingWork();
         clearDraft();
         setInput(EMPTY_INPUT);
         setResult(null);
         setStep(0);
         setMaxReached(0);
+        setReportError(null);
         setError("Your session expired after 30 minutes of inactivity, so your answers were cleared.");
       }, IDLE_TIMEOUT_MS);
     };
@@ -94,22 +125,25 @@ export function AssessmentWizard() {
       window.clearTimeout(idle);
       events.forEach((name) => window.removeEventListener(name, restart));
     };
-  }, []);
+  }, [cancelPendingWork]);
 
   useEffect(() => {
     mainHeading.current?.focus();
   }, [step]);
 
   const update = <K extends keyof AssessmentInput>(key: K, value: AssessmentInput[K]) => {
+    cancelPendingWork();
     setInput((current) => ({ ...current, [key]: value }));
     if (result) {
       setResult(null);
       setMaxReached((current) => Math.min(current, 1));
     }
     setError(null);
+    setReportError(null);
   };
 
   const moveTo = (nextStep: number) => {
+    cancelPendingWork();
     if (nextStep === 1) {
       const message = validateDescription(input.description);
       if (message) { setError(message); return; }
@@ -120,40 +154,58 @@ export function AssessmentWizard() {
   };
 
   const assess = async () => {
+    if (pendingAssessment.current) return;
     const message = validateQuestions(input);
     if (message) { setError(message); return; }
+    const controller = new AbortController();
+    pendingAssessment.current = controller;
     setLoading(true);
     setError(null);
     try {
-      const response = await requestAssessment(input);
+      const response = await requestAssessment(input, controller.signal);
+      if (controller.signal.aborted || pendingAssessment.current !== controller) return;
       setResult(response);
       moveTo(2);
-    } catch {
-      setError("The assessment service could not complete this request. Check your answers and try again.");
+    } catch (failure) {
+      if (controller.signal.aborted || pendingAssessment.current !== controller) return;
+      setError(failure instanceof AssessmentServiceError && failure.status === 422
+        ? "The assessment service could not accept these answers. Review them and try again."
+        : "The assessment service is unavailable. Your answers are still in this tab—please try again.");
     } finally {
-      setLoading(false);
+      if (pendingAssessment.current === controller) {
+        pendingAssessment.current = null;
+        setLoading(false);
+      }
     }
   };
 
   const reset = () => {
+    cancelPendingWork();
     setInput(EMPTY_INPUT);
     setResult(null);
     setStep(0);
     setMaxReached(0);
     setError(null);
+    setReportError(null);
     clearDraft();
   };
 
   const download = async () => {
-    if (!result) return;
+    if (!result || pendingReport.current) return;
+    const controller = new AbortController();
+    pendingReport.current = controller;
     setDownloading(true);
     setReportError(null);
     try {
-      await downloadAssessmentReport(input, result);
+      await downloadAssessmentReport(input, result, controller.signal);
     } catch {
+      if (controller.signal.aborted || pendingReport.current !== controller) return;
       setReportError("The report could not be generated. Your assessment is still here—please try again.");
     } finally {
-      setDownloading(false);
+      if (pendingReport.current === controller) {
+        pendingReport.current = null;
+        setDownloading(false);
+      }
     }
   };
 
@@ -161,7 +213,7 @@ export function AssessmentWizard() {
     <main>
       <a className="skip-link" href="#assessment">Skip to the assessment</a>
       <header className="masthead">
-        <a className="brand" href="#top" aria-label="Karlsgate home">KARLSGATE</a>
+        <a className="brand" href="#top" aria-label="Data Governance Readiness Analyzer home">DATA GOVERNANCE</a>
         <span className="edition">READINESS / 01</span>
       </header>
 
@@ -253,12 +305,22 @@ export function AssessmentWizard() {
           )}
 
           {step === 2 && result && (
-            <div className="step-panel">
+            <div
+              className="step-panel risk-result"
+              style={{
+                "--risk-color": riskColor(result.score),
+                "--risk-position": `${result.score}%`,
+              } as React.CSSProperties}
+            >
               <p className="section-number">03 / ASSESSMENT</p>
               <h2 ref={mainHeading} tabIndex={-1}>The proposed use case is <em>{result.level.toLowerCase()} risk.</em></h2>
-              <div className={`score ${result.level.toLowerCase()}`}>
+              <div className="score">
                 <span className="score-number">{result.score}</span><span className="score-total">/ 100</span>
                 <div><b>{result.level} RISK</b><p>{result.guidance}</p></div>
+              </div>
+              <div className="risk-scale" aria-hidden="true">
+                <div className="risk-scale-track"><i /></div>
+                <div className="risk-scale-labels"><span>Low risk</span><span>High risk</span></div>
               </div>
               <div className="rule" />
               <h3>What drives this score</h3>
@@ -271,31 +333,55 @@ export function AssessmentWizard() {
           )}
 
           {step === 3 && result && (
-            <div className="step-panel">
+            <div
+              className="step-panel recommendation-result"
+              style={{ "--risk-color": riskColor(result.score) } as React.CSSProperties}
+            >
               <p className="section-number">04 / RECOMMENDATIONS</p>
               <h2 ref={mainHeading} tabIndex={-1}>Controls before approval.</h2>
               <p className="lede">Use this record to begin privacy, security, and business-owner review.</p>
+              <div className="recommendation-outcome">
+                <b>{result.level} RISK · {result.score}/100</b>
+                <p>{result.guidance}</p>
+              </div>
               <h3>General safeguards</h3>
-              <ol className="recommendation-list">
-                {result.generalSafeguards.map((item, index) => (
-                  <li key={item.id}>
-                    <span>{String(index + 1).padStart(2, "0")}</span>
-                    <div><p>{item.text}</p><p className="recommendation-reason">{recommendationReason(item, result.factors)}</p></div>
-                  </li>
-                ))}
-              </ol>
-              {result.karlsgateRecommendations.length > 0 && <div className="capability-panel">
-                <p className="section-number">KARLSGATE CAPABILITY FIT</p>
-                <h3>Controls that fit this use case</h3>
-                <ul className="capability-list">
-                  {result.karlsgateRecommendations.map((capability) => (
-                    <li key={capability.id}>
-                      <b>{capability.label}</b><p>{capability.text}</p>
-                      <p className="recommendation-reason">{recommendationReason(capability, result.factors)}</p>
-                    </li>
-                  ))}
-                </ul>
-              </div>}
+              {result.recommendationDetails.length > 0 ? (
+                <ol className="recommendation-list">
+                  {result.recommendationDetails.map((item) => {
+                    const factorLabels = item.riskFactorIds.flatMap((ruleId) => {
+                      const label = factorLabelsById.get(ruleId);
+                      return label ? [label] : [];
+                    });
+                    return (
+                      <li key={item.id}>
+                        <span>{String(item.priority).padStart(2, "0")}</span>
+                        <div>
+                          <h4>{item.title}</h4>
+                          <p>{item.action}</p>
+                          <p className="recommendation-rationale"><b>Why this applies:</b> {item.rationale}</p>
+                          <p className="recommendation-trace"><b>Triggered by:</b> {factorLabels.join(", ")}</p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : (
+                <p className="empty-state">No tailored safeguards were returned. Apply standard access, minimization, retention, and governance controls before proceeding.</p>
+              )}
+              {result.karlsgateRecommendations.length > 0 && (
+                <div className="capability-panel">
+                  <p className="section-number">KARLSGATE CAPABILITY FIT</p>
+                  <h3>Applicable privacy-enhancing controls</h3>
+                  <p>Only capabilities whose documented applicability rules are satisfied are shown.</p>
+                  <ul className="capability-list">
+                    {result.karlsgateRecommendations.map((capability) => (
+                      <li key={capability.id}><b>{capability.label}</b><p>{capability.text}</p>
+                        <p className="recommendation-reason">{recommendationReason(capability, result.factors)}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <p className="method-note">Recommendation mapping v{result.mappingVersion}: {result.mappingApprovalStatus === "approved" ? "stakeholder approved" : "stakeholder approval pending"}.</p>
               {result.limitations.length > 0 && <div className="limitations"><h3>Specialist review required</h3>{result.limitations.map((item) => <p key={item}>{item}</p>)}</div>}
               <details className="summary"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Scoring rules version</dt><dd>{result.rulesVersion}</dd></div><div><dt>Recommendation mapping version</dt><dd>{result.mappingVersion}</dd></div><div><dt>Assessed</dt><dd>{new Date(result.assessedAt).toLocaleString()}</dd></div></dl></details>

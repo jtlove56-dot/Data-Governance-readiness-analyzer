@@ -1,4 +1,4 @@
-import { AssessmentInput, EMPTY_INPUT } from "./assessment";
+import { AssessmentInput, isAssessmentInput } from "./assessment";
 
 /**
  * Session-scoped draft storage (SCRUM-16).
@@ -26,31 +26,35 @@ function safely<T>(action: () => T, fallback: T): T {
   }
 }
 
-export function purgeLegacyDrafts(storage: Storage = window.localStorage): void {
-  safely(() => LEGACY_KEYS.forEach((key) => storage.removeItem(key)), undefined);
+export function purgeLegacyDrafts(storage?: Storage): void {
+  safely(() => {
+    const target = storage ?? window.localStorage;
+    LEGACY_KEYS.forEach((key) => target.removeItem(key));
+  }, undefined);
 }
 
-export function saveDraft(input: AssessmentInput, storage: Storage = window.sessionStorage, now = Date.now()): void {
+export function saveDraft(input: AssessmentInput, storage?: Storage, now = Date.now()): void {
   const draft: StoredDraft = { savedAt: now, input };
-  safely(() => storage.setItem(DRAFT_KEY, JSON.stringify(draft)), undefined);
+  safely(() => (storage ?? window.sessionStorage).setItem(DRAFT_KEY, JSON.stringify(draft)), undefined);
 }
 
-export function loadDraft(storage: Storage = window.sessionStorage, now = Date.now()): AssessmentInput | null {
-  const raw = safely(() => storage.getItem(DRAFT_KEY), null);
+export function loadDraft(storage?: Storage, now = Date.now()): AssessmentInput | null {
+  const raw = safely(() => (storage ?? window.sessionStorage).getItem(DRAFT_KEY), null);
   if (!raw) return null;
   try {
     const draft = JSON.parse(raw) as StoredDraft;
-    if (typeof draft.savedAt !== "number" || now - draft.savedAt > IDLE_TIMEOUT_MS) {
+    if (!draft || !Number.isFinite(draft.savedAt) || draft.savedAt > now
+      || now - draft.savedAt >= IDLE_TIMEOUT_MS || !isAssessmentInput(draft.input)) {
       clearDraft(storage);
       return null;
     }
-    return { ...EMPTY_INPUT, ...draft.input };
+    return draft.input;
   } catch {
     clearDraft(storage);
     return null;
   }
 }
 
-export function clearDraft(storage: Storage = window.sessionStorage): void {
-  safely(() => storage.removeItem(DRAFT_KEY), undefined);
+export function clearDraft(storage?: Storage): void {
+  safely(() => (storage ?? window.sessionStorage).removeItem(DRAFT_KEY), undefined);
 }

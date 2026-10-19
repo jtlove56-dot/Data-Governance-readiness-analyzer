@@ -12,8 +12,3 @@ services:
         value: 0.1.0
       - key: ALLOWED_ORIGINS
         sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-

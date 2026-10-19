@@ -34,8 +34,14 @@ historical; this release supersedes it for current assessments.
 
 ## Integration
 
-Submit SCRUM 12 to `dev`, not `main`. The branch was implemented against the earlier
-v1 assessment contract. Newer team changes on `dev` introduce a v2 contract and
-prioritized recommendations. Resolve and validate that overlap during PR review
-before merging; do not replace the team's newer validation and request handling
-with the older implementation.
+SCRUM 12 targets `dev`, not `main`, and is integrated with the team's v2 assessment
+contract. Scoring remains server-only. Prioritized `recommendationDetails` retain
+their rationale and factor references; additional mapped safeguards are appended
+when not already represented. The legacy `recommendations` field is not returned.
+
+Results also include `mappingVersion`, `mappingApprovalStatus`, `generalSafeguards`,
+and `karlsgateRecommendations`. The frontend checks these against the versioned
+catalog and only displays applicable, approved capability wording. The UI and PDF
+separate general safeguards from Karlsgate capabilities and show mapping provenance.
+Request cancellation, draft handling, validation, and the team's updated styling
+are preserved. No browser-side scoring fallback is used.

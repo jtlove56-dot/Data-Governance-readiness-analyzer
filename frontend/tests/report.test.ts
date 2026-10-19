@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { AssessmentInput, assessLocally } from "../lib/assessment";
-import { DISCLAIMER, buildReportModel, renderAssessmentPdf } from "../lib/report";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AssessmentInput } from "../lib/assessment";
+import { DISCLAIMER, buildReportModel, downloadAssessmentReport, renderAssessmentPdf } from "../lib/report";
+import { assessmentResult } from "./assessment-fixture";
 
 const input: AssessmentInput = {
   description: "Share loyalty member emails and health survey answers with a research partner.",
@@ -13,8 +14,10 @@ const input: AssessmentInput = {
   purpose: "research",
 };
 
-const result = assessLocally(input, "2026-09-23T15:00:00.000Z");
+const result = assessmentResult;
 const model = buildReportModel(input, result);
+
+afterEach(() => vi.restoreAllMocks());
 
 function headings() {
   return model.sections.map((section) => section.heading);
@@ -51,7 +54,13 @@ describe("report model", () => {
     expect(flatten()).toContain(input.description);
     expect(flatten()).toContain("Email addresses, Health information");
     expect(flatten()).toContain("Research");
-    result.recommendations.forEach((item) => expect(flatten()).toContain(item));
+    result.recommendationDetails.forEach((item) => expect(flatten()).toContain(item.action));
+    result.recommendationDetails.forEach((item) => {
+      expect(flatten()).toContain(item.rationale);
+      item.riskFactorIds.forEach((ruleId) => {
+        expect(flatten()).toContain(result.factors.find((factor) => factor.ruleId === ruleId)?.label);
+      });
+    });
     result.factors.forEach((factor) => expect(flatten()).toContain(factor.label));
     result.karlsgateRecommendations.forEach((item) => expect(flatten()).toContain(item.text));
     expect(flatten()).toContain("Relevant to:");
@@ -80,7 +89,7 @@ describe("report model", () => {
       secondaryUse: "no",
       purpose: "analytics",
     };
-    const lowModel = buildReportModel(lowRisk, assessLocally(lowRisk, "2026-09-23T15:00:00.000Z"));
+    const lowModel = buildReportModel(lowRisk, { ...result, limitations: [] });
     expect(lowModel.sections.map((section) => section.heading)).not.toContain("Specialist review required");
   });
 
@@ -91,6 +100,18 @@ describe("report model", () => {
 });
 
 describe("pdf rendering", () => {
+  it("does not download a report cancelled during generation", async () => {
+    const pdfModule = await import("jspdf");
+    const doc = new pdfModule.jsPDF();
+    const save = vi.spyOn(doc, "save").mockReturnThis();
+    vi.spyOn(pdfModule, "jsPDF").mockImplementation(function () { return doc; });
+    const controller = new AbortController();
+    const download = downloadAssessmentReport(input, result, controller.signal);
+    controller.abort();
+    await download;
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it("produces a multi-page PDF that fits long content", async () => {
     const wordy: AssessmentInput = { ...input, description: "Merge partner records. ".repeat(60) };
     const doc = await renderAssessmentPdf(buildReportModel(wordy, result));
