@@ -29,6 +29,3 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 110
 target-version = "py39"
-
-[tool.ruff.lint]
-ignore = ["UP045"]

@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import type { AssessmentResult } from "../lib/assessment";
 
 export const assessmentResult: AssessmentResult = {
@@ -117,3 +118,20 @@ export const assessmentResult: AssessmentResult = {
   ],
   assessedAt: "2026-09-23T15:00:00.000Z",
 };
+
+/** A fetch that never settles until its request is aborted. */
+export function hangingFetch(_url: RequestInfo | URL, options?: RequestInit): Promise<Response> {
+  return new Promise((_resolve, reject) => {
+    options?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+  });
+}
+
+/** Stubs global fetch to answer every call with `response` (or reject with it). */
+export function stubAssessmentApi(response: Response | Error = new Response(JSON.stringify(assessmentResult))) {
+  const fetchMock = vi.fn<typeof fetch>(async () => {
+    if (response instanceof Error) throw response;
+    return response.clone();
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}

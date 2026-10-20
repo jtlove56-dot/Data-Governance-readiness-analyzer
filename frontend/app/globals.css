@@ -7,7 +7,6 @@
  * mirrors the values the PDF report needs.
  */
 :root {
-  /* Neutrals */
   --ink: #14213d;
   --ink-hover: #22355e;
   --muted: #5a6474;
@@ -24,7 +23,6 @@
   --accent: #d4a03c;
   --accent-strong: #8a5a12;
 
-  /* Feedback states: text colour plus a tinted background. */
   --success: #2e6a4a;
   --success-bg: #e6f1ea;
   --warning: #9a4a0b;
@@ -38,7 +36,6 @@
   --risk-medium: var(--warning);
   --risk-high: var(--danger);
 
-  /* Interaction */
   --focus-ring: var(--accent-strong);
   --focus-ring-on-dark: var(--accent);
   --disabled-bg: #dde1e7;
@@ -124,7 +121,6 @@ textarea::placeholder { color: var(--muted); }
 .primary:active:not(:disabled), .secondary:active:not(:disabled), .destructive:active:not(:disabled) { transform: translateY(0); }
 .secondary { background: transparent; color: var(--ink); }
 .secondary:hover:not(:disabled) { background: var(--surface-hover); }
-/* Destructive: clears the assessment. Outlined in danger, filled on hover. */
 .destructive { background: transparent; color: var(--danger); border-color: var(--danger); }
 .destructive:hover:not(:disabled) { background: var(--danger-hover); border-color: var(--danger-hover); color: var(--white); }
 /* Disabled buttons are only shown while work is in progress; their label says what is happening. */
@@ -138,14 +134,14 @@ textarea::placeholder { color: var(--muted); }
 .binary-row { display: flex; gap: 8px; }
 .choice { min-height: 46px; border: 1px solid var(--control-line); color: var(--ink); background: transparent; padding: 8px 14px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: border-color .18s, background .18s; }
 .choice:hover { border-color: var(--ink); background: var(--surface-hover); }
-/* Selected: filled, plus a tick in .choice-mark. */
+/* Selection is shown by the tick as well as the fill, not colour alone. */
 .choice[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--white); }
 .choice[aria-pressed="true"]:hover { background: var(--ink-hover); border-color: var(--ink-hover); }
 .choice-mark { width: 18px; height: 18px; flex: 0 0 18px; border: 1px solid currentColor; display: grid; place-items: center; font-size: 11px; }
 .binary-row .choice { min-width: 110px; }
 .select-field { display: block; padding-top: 28px; border-top: 1px solid var(--line); }
 
-/* Risk levels. The panel sets data-risk; text label and shape always accompany the colour. */
+/* Panels set data-risk; colour is always paired with a label and a shape. */
 [data-risk="low"] { --risk-color: var(--risk-low); }
 [data-risk="medium"] { --risk-color: var(--risk-medium); }
 [data-risk="high"] { --risk-color: var(--risk-high); }
@@ -164,12 +160,13 @@ textarea::placeholder { color: var(--muted); }
 .risk-result .score-number { color: var(--risk-color); }
 /* Three bands matching the rubric thresholds (0–29, 30–59, 60–100). */
 .risk-scale { margin: 8px 0 34px; }
-.risk-scale-track { position: relative; height: 6px; display: grid; grid-template-columns: 30fr 30fr 40fr; gap: 2px; }
+.risk-scale-track, .risk-scale-labels { display: grid; grid-template-columns: 30fr 30fr 40fr; gap: 2px; }
+.risk-scale-track { position: relative; height: 6px; }
 .risk-scale-track > span:nth-child(1) { background: var(--risk-low); }
 .risk-scale-track > span:nth-child(2) { background: var(--risk-medium); }
 .risk-scale-track > span:nth-child(3) { background: var(--risk-high); }
 .risk-scale-track i { position: absolute; top: 50%; left: var(--risk-position); width: 16px; height: 16px; border: 3px solid var(--surface); border-radius: 50%; background: var(--risk-color); box-shadow: 0 0 0 1px var(--ink); transform: translate(-50%, -50%); transition: left .45s ease; }
-.risk-scale-labels { display: grid; grid-template-columns: 30fr 30fr 40fr; gap: 2px; margin-top: 9px; color: var(--muted); font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.risk-scale-labels { margin-top: 9px; color: var(--muted); font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
 .risk-scale-labels span:last-child { text-align: right; }
 .rule { height: 1px; background: var(--ink); margin: 40px 0 28px; }
 .workspace h3 { font-family: var(--font-serif), serif; font-weight: 500; font-size: 25px; margin: 0 0 18px; }
@@ -188,7 +185,6 @@ textarea::placeholder { color: var(--muted); }
 .recommendation-list .recommendation-rationale { color: var(--muted); font-size: 13px; line-height: 1.55; margin-top: 9px; }
 .recommendation-list .recommendation-rationale b { color: var(--ink); }
 .recommendation-list .recommendation-trace { color: var(--accent-strong); font-family: var(--font-mono), monospace; font-size: 10px; line-height: 1.5; margin-top: 8px; }
-.recommendation-list .recommendation-trace b { color: inherit; }
 .empty-state { border: 1px solid var(--control-line); color: var(--muted); padding: 18px; line-height: 1.55; }
 .capability-panel { color: var(--on-ink-strong); background: var(--ink); margin: 40px 0 24px; padding: 28px; }
 .capability-panel .section-number { color: var(--accent); }
@@ -199,8 +195,7 @@ textarea::placeholder { color: var(--muted); }
 .capability-panel > p:not(.section-number) { color: var(--on-ink); margin: 0; line-height: 1.6; }
 /* A caution rather than a failure, so it uses the warning state. */
 .limitations { border-left: 3px solid var(--warning); background: var(--warning-bg); padding: 14px 18px; margin: 26px 0; }
-.limitations h3 { color: var(--warning); font-size: 20px; }
-.workspace .limitations h3 { margin-bottom: 8px; }
+.workspace .limitations h3 { color: var(--warning); font-size: 20px; margin-bottom: 8px; }
 .limitations p { color: var(--ink); font-size: 13px; line-height: 1.55; margin: 6px 0 0; }
 .summary { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 18px 0; }
 .summary summary { cursor: pointer; font-weight: 600; }
@@ -231,7 +226,7 @@ footer { min-height: 48px; padding: 8px clamp(22px, 4vw, 64px); gap: 16px; displ
   /* Stop the character counter colliding with the help text. */
   .field-meta { flex-direction: column; align-items: flex-start; gap: 2px; }
   .choice-grid { grid-template-columns: 1fr; }
-  .score { grid-template-columns: auto auto; align-items: end; }
+  .score { grid-template-columns: auto auto; }
   .score > div { grid-column: 1 / -1; margin: 22px 0 0; padding: 18px 0 0; border-left: 0; border-top: 1px solid var(--line); }
   .actions.wrap { align-items: stretch; flex-direction: column-reverse; }
   .actions.wrap > div { flex-direction: column; }

@@ -27,12 +27,7 @@ export const QUESTION_LABELS = {
   purpose: "What is the intended use?",
 } as const;
 
-/**
- * Approved plain-language copy for each privacy-preserving capability, quoted from
- * docs/risk-scoring-rubric-v1.0.md (SCRUM-6). Keyed by the capability
- * label the scoring service returns. Do not reword without the product
- * owner's approval: the rubric is the source of truth.
- */
+/** Approved copy from docs/risk-scoring-rubric-v1.0.md (SCRUM-6), keyed by API capability label. Do not reword without product-owner approval. */
 export const CAPABILITY_COPY: Record<string, string> = {
   "Protected matching":
     "Identify records shared across parties without transferring raw identifiers to the other party.",
@@ -102,20 +97,24 @@ export const EMPTY_INPUT: AssessmentInput = {
   purpose: "matching",
 };
 
-const BINARY_FIELDS = ["externalAccess", "rawExchange", "dataMovement", "combined", "secondaryUse"] as const;
+export const BINARY_FIELDS = ["externalAccess", "rawExchange", "dataMovement", "combined", "secondaryUse"] as const;
+export const DESCRIPTION_MAX_LENGTH = 1000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function hasUniqueValues(values: string[]): boolean {
+  return new Set(values).size === values.length;
+}
+
 export function isAssessmentInput(value: unknown): value is AssessmentInput {
   if (!isRecord(value)) return false;
   const dataTypes = value.dataTypes;
-  return typeof value.description === "string" && value.description.length <= 1000
+  return typeof value.description === "string" && value.description.length <= DESCRIPTION_MAX_LENGTH
     && Array.isArray(dataTypes)
-    && dataTypes.length <= Object.keys(DATA_TYPE_LABELS).length
     && dataTypes.every((item) => typeof item === "string" && Object.hasOwn(DATA_TYPE_LABELS, item))
-    && new Set(dataTypes).size === dataTypes.length
+    && hasUniqueValues(dataTypes)
     && BINARY_FIELDS.every((field) => ["", "yes", "no"].includes(value[field] as string))
     && typeof value.purpose === "string" && Object.hasOwn(PURPOSE_LABELS, value.purpose);
 }
@@ -124,7 +123,9 @@ export function validateDescription(value: string): string | null {
   const length = value.trim().length;
   if (length === 0) return "Describe the proposed data use case before continuing.";
   if (length < 20) return "Add a little more detail—include the data, who will use it, and why.";
-  if (length > 1000) return "Keep the description to 1,000 characters or fewer.";
+  if (length > DESCRIPTION_MAX_LENGTH) {
+    return `Keep the description to ${DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")} characters or fewer.`;
+  }
   return null;
 }
 
@@ -141,10 +142,6 @@ export const ASSESSMENT_TIMEOUT_MS = 15_000;
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function hasUniqueValues(values: string[]): boolean {
-  return new Set(values).size === values.length;
 }
 
 function isRiskFactor(value: unknown): value is RiskFactor {
