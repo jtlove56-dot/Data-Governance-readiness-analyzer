@@ -1,6 +1,7 @@
 import {
   AssessmentInput,
   AssessmentResult,
+  BINARY_FIELDS,
   CAPABILITY_COPY,
   DATA_TYPE_LABELS,
   PURPOSE_LABELS,
@@ -9,14 +10,7 @@ import {
 } from "./assessment";
 import { PALETTE, RISK_COLORS } from "./theme";
 
-/**
- * Assessment report (SCRUM-15).
- *
- * The report is built and rendered entirely in the browser and is never
- * uploaded; see docs/data-handling.md. `buildReportModel` is a pure
- * function so the report's content can be tested without a PDF engine,
- * and it deliberately omits internal identifiers such as rule ids.
- */
+// Built and rendered in the browser, never uploaded (docs/data-handling.md). buildReportModel is pure and omits internal rule ids.
 
 export const DISCLAIMER =
   "This report is decision support, not legal advice. It does not determine compliance with HIPAA, PCI DSS, or any other regulation. Specialist legal, privacy, and security review may still be required.";
@@ -33,7 +27,7 @@ export type ReportModel = {
   sections: ReportSection[];
 };
 
-function formatAssessedAt(value: string): string {
+export function formatAssessedAt(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
@@ -53,11 +47,7 @@ export function buildReportModel(
           label: "Information involved",
           value: input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ") || "None selected",
         },
-        { label: QUESTION_LABELS.externalAccess, value: answerLabel(input.externalAccess) },
-        { label: QUESTION_LABELS.rawExchange, value: answerLabel(input.rawExchange) },
-        { label: QUESTION_LABELS.dataMovement, value: answerLabel(input.dataMovement) },
-        { label: QUESTION_LABELS.combined, value: answerLabel(input.combined) },
-        { label: QUESTION_LABELS.secondaryUse, value: answerLabel(input.secondaryUse) },
+        ...BINARY_FIELDS.map((key) => ({ label: QUESTION_LABELS[key], value: answerLabel(input[key]) })),
         { label: QUESTION_LABELS.purpose, value: PURPOSE_LABELS[input.purpose] },
       ],
     },
@@ -92,7 +82,7 @@ export function buildReportModel(
     sections.push({
       heading: "Privacy-enhancing capability fit",
       kind: "list",
-      items: result.capabilities.map((capability) => `${capability}: ${CAPABILITY_COPY[capability] ?? ""}`),
+      items: result.capabilities.map((capability) => `${capability}: ${CAPABILITY_COPY[capability]}`),
     });
   }
 
@@ -123,8 +113,6 @@ function answerLabel(value: string): string {
   return "Not answered";
 }
 
-// --- PDF rendering ------------------------------------------------------
-
 const PAGE = { width: 595.28, height: 841.89 }; // A4 in points
 const MARGIN = 56;
 const CONTENT_WIDTH = PAGE.width - MARGIN * 2;
@@ -136,7 +124,6 @@ function wrap(doc: Doc, text: string, width: number): string[] {
   return doc.splitTextToSize(text, width) as string[];
 }
 
-/** Renders the model into a jsPDF document, paginating as it goes. */
 export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -164,7 +151,6 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
     }
   };
 
-  // Title block
   doc.setTextColor(PALETTE.ink);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
@@ -249,12 +235,9 @@ function drawRiskShape(doc: Doc, level: RiskLevel, x: number, y: number) {
   } else doc.triangle(x - r, y + r, x, y - r, x + r, y + r, "F");
 }
 
-export const REPORT_FILENAME = "data-governance-assessment.pdf";
+const REPORT_FILENAME = "data-governance-assessment.pdf";
 
-/**
- * Builds and downloads the report. Throws if generation fails so the
- * caller can show a message; the assessment on screen is untouched.
- */
+/** Throws on failure so the caller can show an error. */
 export async function downloadAssessmentReport(
   input: AssessmentInput,
   result: AssessmentResult,

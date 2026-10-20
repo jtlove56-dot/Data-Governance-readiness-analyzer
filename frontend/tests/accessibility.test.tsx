@@ -3,9 +3,9 @@ import { StrictMode } from "react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssessmentWizard } from "../components/AssessmentWizard";
-import { CAPABILITY_COPY, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
+import { BINARY_FIELDS, CAPABILITY_COPY, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, saveDraft } from "../lib/session";
-import { assessmentResult } from "./assessment-fixture";
+import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-fixture";
 
 /**
  * Accessibility checks for the assessment flow (SCRUM-17).
@@ -28,36 +28,28 @@ async function expectNoViolations(container: HTMLElement) {
   expect(summary).toEqual([]);
 }
 
-function completeQuestions() {
-  ["externalAccess", "rawExchange", "dataMovement", "combined", "secondaryUse"].forEach((key) => {
-    const group = screen.getByRole("group", {
-      name: new RegExp(QUESTION_LABELS[key as keyof typeof QUESTION_LABELS].slice(0, 24), "i"),
-    });
+function describeUseCase(description = "Share loyalty member emails with a partner brand for campaign measurement.") {
+  fireEvent.change(screen.getByLabelText(/use-case description/i), { target: { value: description } });
+  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+}
+
+function completeQuestions(dataType = /email addresses/i) {
+  fireEvent.click(screen.getByRole("button", { name: dataType }));
+  BINARY_FIELDS.forEach((key) => {
+    const group = screen.getByRole("group", { name: new RegExp(QUESTION_LABELS[key].slice(0, 24), "i") });
     fireEvent.click(within(group).getByRole("button", { name: "Yes" }));
   });
 }
 
-function answerQuestions() {
-  fireEvent.change(screen.getByLabelText(/use-case description/i), {
-    target: { value: "Share loyalty member emails with a partner brand for campaign measurement." },
-  });
-  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-  fireEvent.click(screen.getByRole("button", { name: /email addresses/i }));
-  completeQuestions();
+function answerQuestions(dataType?: RegExp, description?: string) {
+  describeUseCase(description);
+  completeQuestions(dataType);
 }
 
 beforeEach(() => {
   window.sessionStorage.clear?.();
   vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation(() =>
-      new Response(JSON.stringify(assessmentResult), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    ),
-  );
+  stubAssessmentApi();
 });
 
 afterEach(() => {
@@ -116,9 +108,7 @@ describe("assessment flow accessibility", () => {
 
   it("aborts scoring and clears the draft on idle expiry", async () => {
     vi.useFakeTimers();
-    vi.mocked(fetch).mockImplementationOnce((_url, options) => new Promise((_resolve, reject) => {
-      options?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
-    }));
+    vi.mocked(fetch).mockImplementationOnce(hangingFetch);
     render(<AssessmentWizard />);
     await act(async () => vi.advanceTimersByTimeAsync(0));
     answerQuestions();
@@ -130,9 +120,7 @@ describe("assessment flow accessibility", () => {
   });
 
   it("aborts scoring when the wizard unmounts", async () => {
-    vi.mocked(fetch).mockImplementationOnce((_url, options) => new Promise((_resolve, reject) => {
-      options?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
-    }));
+    vi.mocked(fetch).mockImplementationOnce(hangingFetch);
     const view = render(<AssessmentWizard />);
     answerQuestions();
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
@@ -161,37 +149,23 @@ describe("assessment flow accessibility", () => {
   it("keeps every step reachable and accessible through the whole flow", async () => {
     const { container } = render(<AssessmentWizard />);
 
-    fireEvent.change(screen.getByLabelText(/use-case description/i), {
-      target: { value: "Share loyalty member emails with a partner brand for campaign measurement." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-
-    // Step 2: questions
+    describeUseCase();
     await screen.findByText(/how will the data be handled/i);
     await expectNoViolations(container);
-    fireEvent.click(screen.getByRole("button", { name: /email addresses/i }));
     completeQuestions();
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
 
-    // Step 3: score
     await screen.findByText(/what drives this score/i);
     await expectNoViolations(container);
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
 
-    // Step 4: recommendations
     await screen.findByText(/controls before approval/i);
     await expectNoViolations(container);
   });
 
   it("explains each recommended control in approved plain language", async () => {
     const { container } = render(<AssessmentWizard />);
-    fireEvent.change(screen.getByLabelText(/use-case description/i), {
-      target: { value: "Share loyalty member emails with a partner brand for campaign measurement." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByText(/how will the data be handled/i);
-    fireEvent.click(screen.getByRole("button", { name: /email addresses/i }));
-    completeQuestions();
+    answerQuestions();
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
     await screen.findByText(/what drives this score/i);
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
@@ -215,13 +189,7 @@ describe("assessment flow accessibility", () => {
 
   it("does not rely on colour alone to convey the risk level", async () => {
     render(<AssessmentWizard />);
-    fireEvent.change(screen.getByLabelText(/use-case description/i), {
-      target: { value: "Share patient records with an external analytics vendor for modelling." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByText(/how will the data be handled/i);
-    fireEvent.click(screen.getByRole("button", { name: /health information/i }));
-    completeQuestions();
+    answerQuestions(/health information/i, "Share patient records with an external analytics vendor for modelling.");
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
 
     await screen.findByText(/what drives this score/i);

@@ -2,25 +2,24 @@ from time import perf_counter
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import sample_payload
 
+from app.config import Settings
 from app.logging_config import JsonFormatter
-from app.main import app
+from app.main import app, create_app
 
 client = TestClient(app)
 
 
-def sample_payload(**overrides):
-    payload = {
-        "dataTypes": ["emails"],
-        "externalAccess": "yes",
-        "rawExchange": "no",
-        "dataMovement": "no",
-        "combined": "no",
-        "secondaryUse": "no",
-        "purpose": "matching",
-    }
-    payload.update(overrides)
-    return payload
+def preflight(test_client, origin):
+    return test_client.options(
+        "/assessments",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
 
 
 def test_health_and_version():
@@ -102,14 +101,7 @@ def test_oversized_request_is_rejected_before_validation():
 
 @pytest.mark.parametrize("origin", ["http://localhost:3000", "http://127.0.0.1:3000"])
 def test_development_frontend_origins_can_post(origin):
-    response = client.options(
-        "/assessments",
-        headers={
-            "Origin": origin,
-            "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "content-type",
-        },
-    )
+    response = preflight(client, origin)
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == origin
@@ -124,28 +116,9 @@ def test_development_frontend_origins_can_post(origin):
         ("https://other-project-team.vercel.app", False),
     ],
 )
-def test_preview_origin_regex_controls_cors(monkeypatch, origin, allowed):
-    import importlib
-
-    import app.config
-    import app.main
-
-    monkeypatch.setenv("ALLOWED_ORIGIN_REGEX", r"https://data-governance-analyzer-[a-z0-9-]+-team\.vercel\.app")
-    try:
-        importlib.reload(app.config)
-        preview_client = TestClient(importlib.reload(app.main).app)
-        response = preview_client.options(
-            "/assessments",
-            headers={
-                "Origin": origin,
-                "Access-Control-Request-Method": "POST",
-                "Access-Control-Request-Headers": "content-type",
-            },
-        )
-    finally:
-        monkeypatch.delenv("ALLOWED_ORIGIN_REGEX")
-        importlib.reload(app.config)
-        importlib.reload(app.main)
+def test_preview_origin_regex_controls_cors(origin, allowed):
+    settings = Settings(allowed_origin_regex=r"https://data-governance-analyzer-[a-z0-9-]+-team\.vercel\.app")
+    response = preflight(TestClient(create_app(settings)), origin)
 
     assert (response.headers.get("access-control-allow-origin") == origin) is allowed
 

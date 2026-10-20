@@ -37,8 +37,6 @@ class AssessmentRequest(BaseModel):
 
 
 class RiskFactor(BaseModel):
-    """A single rule that fired and contributed to the score."""
-
     ruleId: str
     category: str
     label: str
@@ -46,8 +44,6 @@ class RiskFactor(BaseModel):
 
 
 class RecommendationDetail(BaseModel):
-    """A prioritized safeguard with an explanation and factor traceability."""
-
     id: str
     priority: int = Field(ge=1)
     title: str

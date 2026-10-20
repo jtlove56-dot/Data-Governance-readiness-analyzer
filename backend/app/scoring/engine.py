@@ -42,8 +42,7 @@ def score_assessment(
     level = ruleset.thresholds.level_for(score)
     guidance = ruleset.guidance_by_level[level]
 
-    applicable_capabilities = [cap for cap in ruleset.capabilities if cap.applies(request)]
-    capabilities = _unique(cap.label for cap in applicable_capabilities)
+    capabilities = _unique(cap.label for cap in ruleset.capabilities if cap.applies(request))
 
     fired_rule_ids = {factor.ruleId for factor in factors}
     recommendation_rules = [rule for rule in ruleset.recommendations if rule.applies(request)]
