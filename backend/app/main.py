@@ -23,6 +23,7 @@ app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_by
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.allowed_origins),
+    allow_origin_regex=settings.allowed_origin_regex,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],

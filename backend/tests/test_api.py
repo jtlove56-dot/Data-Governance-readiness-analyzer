@@ -115,6 +115,41 @@ def test_development_frontend_origins_can_post(origin):
     assert response.headers["access-control-allow-origin"] == origin
 
 
+@pytest.mark.parametrize(
+    ("origin", "allowed"),
+    [
+        ("https://data-governance-analyzer-git-dev-team.vercel.app", True),
+        ("https://data-governance-analyzer-abc123-team.vercel.app", True),
+        ("https://evil.example/data-governance-analyzer-x-team.vercel.app", False),
+        ("https://other-project-team.vercel.app", False),
+    ],
+)
+def test_preview_origin_regex_controls_cors(monkeypatch, origin, allowed):
+    import importlib
+
+    import app.config
+    import app.main
+
+    monkeypatch.setenv("ALLOWED_ORIGIN_REGEX", r"https://data-governance-analyzer-[a-z0-9-]+-team\.vercel\.app")
+    try:
+        importlib.reload(app.config)
+        preview_client = TestClient(importlib.reload(app.main).app)
+        response = preview_client.options(
+            "/assessments",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+    finally:
+        monkeypatch.delenv("ALLOWED_ORIGIN_REGEX")
+        importlib.reload(app.config)
+        importlib.reload(app.main)
+
+    assert (response.headers.get("access-control-allow-origin") == origin) is allowed
+
+
 def test_user_controlled_extra_field_name_is_not_echoed_or_logged(caplog):
     submitted_field_name = "person@example.com"
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
 
@@ -15,6 +17,7 @@ class Settings:
         ).split(",")
         if origin.strip()
     )
+    allowed_origin_regex: str | None = os.getenv("ALLOWED_ORIGIN_REGEX") or None
 
 
 settings = Settings()
