@@ -65,29 +65,15 @@ export type ImportedDocument = {
  * runner resolves `import.meta.url` to an http origin it cannot import.
  */
 export function defaultPdfWorkerSrc(): string {
-  return new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-}
-
-/**
- * pdf.js 6 calls `Promise.try`, which only landed in Chrome 128, Safari 18.2,
- * Firefox 134 and Node 23. Clients open this in whatever browser their IT
- * gives them, and CI runs Node 22, so provide the standard behaviour where it
- * is missing rather than pinning pdf.js to a release with a known RCE
- * (CVE-2024-4367, fixed in 4.2).
- */
-function ensurePromiseTry(): void {
-  const target = Promise as unknown as {
-    try?: (fn: (...args: unknown[]) => unknown, ...args: unknown[]) => Promise<unknown>;
-  };
-  if (typeof target.try === "function") return;
-  // A synchronous throw inside the executor rejects the promise, which is the
-  // behaviour Promise.try specifies.
-  target.try = (fn, ...args) => new Promise((resolve) => resolve(fn(...args)));
+  return new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
 }
 
 async function readPdf(file: File, pdfWorkerSrc?: string): Promise<string> {
-  ensurePromiseTry();
-  const pdfjs = await import("pdfjs-dist");
+  // The legacy build carries the polyfills pdf.js 6 needs (Promise.try,
+  // Float16Array, Uint8Array.fromBase64). Without it the parser only runs on
+  // Chrome 135+/Safari 26+/Node 24+, which our CI and many corporate browsers
+  // are not.
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc ?? defaultPdfWorkerSrc();
   const data = new Uint8Array(await file.arrayBuffer());
   const task = pdfjs.getDocument({ data, useWorkerFetch: false });

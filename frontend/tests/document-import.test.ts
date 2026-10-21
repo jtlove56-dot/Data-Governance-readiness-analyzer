@@ -17,7 +17,7 @@ const fixture = (name: string) => readFileSync(join(__dirname, "fixtures", name)
 // The app gets its worker from the bundler; under the test runner we point
 // pdf.js at the file on disk.
 const pdfWorkerSrc = pathToFileURL(
-  createRequire(import.meta.url).resolve("pdfjs-dist/build/pdf.worker.min.mjs"),
+  createRequire(import.meta.url).resolve("pdfjs-dist/legacy/build/pdf.worker.min.mjs"),
 ).toString();
 
 function fileFrom(name: string, body: Uint8Array | string, type = ""): File {
