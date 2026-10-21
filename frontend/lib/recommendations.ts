@@ -87,7 +87,6 @@ export function matchesRecommendationResult(
     && value.mappingApprovalStatus === expected.mappingApprovalStatus
     && Array.isArray(general) && general.length === expected.generalSafeguards.length
     && general.every((item, index) => matches(item, expected.generalSafeguards[index]))
-    && Array.isArray(capabilities)
-    && capabilities.every((item) => expected.karlsgateRecommendations.some((entry) => matches(item, entry)))
-    && new Set(capabilities.map((item) => (item as KarlsgateRecommendation).id)).size === capabilities.length;
+    && Array.isArray(capabilities) && capabilities.length === expected.karlsgateRecommendations.length
+    && capabilities.every((item, index) => matches(item, expected.karlsgateRecommendations[index]));
 }

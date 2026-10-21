@@ -67,4 +67,4 @@ Deployment configuration and environment requirements are documented in [docs/de
 The approved risk-to-safeguard mapping is integrated with assessment API schema v2.
 See [mapping v1.1](docs/recommendation-mapping-v1.1.md) for approval, applicability,
 and result traceability. Scoring remains server-only; general safeguards and
-Karlsgate-specific recommendations are kept separate. This work targets `dev`.
+Karlsgate-specific recommendations are kept separate.

@@ -31,13 +31,6 @@ class Rule:
 
 
 @dataclass(frozen=True)
-class Capability:
-    id: str
-    label: str
-    applies: Predicate
-
-
-@dataclass(frozen=True)
 class Limitation:
     """A caveat surfaced when a regulated data category is involved."""
 
@@ -76,7 +69,6 @@ class RuleSet:
     thresholds: RiskThresholds
     guidance_by_level: Mapping[RiskLevel, str]
     rules: tuple[Rule, ...]
-    capabilities: tuple[Capability, ...]
     limitations: tuple[Limitation, ...]
     recommendations: tuple[RecommendationRule, ...]
 
@@ -129,26 +121,6 @@ RULESET_V1_0 = RuleSet(
         Rule("PURPOSE_OTHER", "purpose", "Intended use: Other", 6, lambda p: p.purpose == "other"),
         Rule("PURPOSE_MARKETING", "purpose", "Intended use: Marketing or advertising", 8, lambda p: p.purpose == "marketing"),
         Rule("PURPOSE_AI", "purpose", "Intended use: AI model training or development", 10, lambda p: p.purpose == "ai"),
-    ),
-    # Tuple order is display/priority order.
-    capabilities=(
-        Capability(
-            "PROTECTED_MATCHING",
-            "Protected matching",
-            _uses_protected_matching,
-        ),
-        Capability(
-            "REID_REMEDIATION",
-            "Re-identification risk remediation",
-            lambda p: p.combined == "yes",
-        ),
-        Capability(
-            "DEIDENTIFICATION",
-            "De-identification",
-            _has_high_sensitivity,
-        ),
-        Capability("DATA_MINIMIZATION", "Data minimization", lambda p: True),
-        Capability("GOVERNANCE_EXECUTION", "Governance policy execution", lambda p: True),
     ),
     limitations=(
         Limitation(
@@ -255,11 +227,9 @@ def _validate_ruleset(ruleset: RuleSet) -> None:
 
     rule_ids = tuple(rule.id for rule in ruleset.rules)
     recommendation_ids = tuple(rule.id for rule in ruleset.recommendations)
-    capability_ids = tuple(capability.id for capability in ruleset.capabilities)
     duplicate_ids = {
         "rules": _duplicates(rule_ids),
         "recommendations": _duplicates(recommendation_ids),
-        "capabilities": _duplicates(capability_ids),
     }
     collisions = {kind: values for kind, values in duplicate_ids.items() if values}
     if collisions:

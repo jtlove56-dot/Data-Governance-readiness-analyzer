@@ -77,6 +77,7 @@ def test_applicability_and_coverage_across_all_questionnaire_combinations():
         assert {item.text for item in result.generalSafeguards} <= set(actions)
         assert all("Karlsgate" not in text for text in actions)
         assert len(actions) == len(set(actions))
+        assert len({item.id for item in result.recommendationDetails}) == len(actions)
         assert [item.priority for item in result.recommendationDetails] == list(range(1, len(actions) + 1))
         assert all(set(item.riskFactorIds) <= factors for item in result.recommendationDetails)
 
