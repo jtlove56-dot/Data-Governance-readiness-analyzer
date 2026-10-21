@@ -82,6 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "requestId": request_id,
                     "schemaVersion": result.schemaVersion,
                     "rulesVersion": result.rulesVersion,
+                    "mappingVersion": result.mappingVersion,
                     "score": result.score,
                     "riskLevel": result.level,
                     "ruleIds": [factor.ruleId for factor in result.factors],

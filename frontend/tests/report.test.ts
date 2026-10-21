@@ -34,7 +34,7 @@ describe("report model", () => {
       "Risk assessment",
       "Contributing risk factors",
       "Recommended safeguards",
-      "Privacy-enhancing capability fit",
+      "Karlsgate capability fit",
       "Specialist review required",
       "Disclaimer",
     ]);
@@ -45,6 +45,8 @@ describe("report model", () => {
     expect(flat).toContain(result.level);
     expect(flat).toContain(result.guidance);
     expect(model.meta).toContainEqual({ label: "Scoring rules version", value: result.rulesVersion });
+    expect(model.meta).toContainEqual({ label: "Recommendation mapping version", value: result.mappingVersion });
+    expect(model.meta).toContainEqual({ label: "Mapping approval", value: "Approved" });
   });
 
   it("carries the use case, every answer, and every recommendation", () => {
@@ -59,6 +61,8 @@ describe("report model", () => {
       });
     });
     result.factors.forEach((factor) => expect(flat).toContain(factor.label));
+    result.karlsgateRecommendations.forEach((item) => expect(flat).toContain(item.text));
+    expect(flat).toContain("Relevant to:");
   });
 
   it("omits internal rule identifiers and categories", () => {

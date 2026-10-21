@@ -1,7 +1,8 @@
 import { vi } from "vitest";
 import type { AssessmentResult } from "../lib/assessment";
+import { mapRecommendations, type RecommendationResult } from "../lib/recommendations";
 
-export const assessmentResult: AssessmentResult = {
+const baseResult: Omit<AssessmentResult, keyof RecommendationResult> = {
   schemaVersion: "2.0",
   rulesVersion: "1.0",
   score: 100,
@@ -119,6 +120,10 @@ export const assessmentResult: AssessmentResult = {
   assessedAt: "2026-09-23T15:00:00.000Z",
 };
 
+export const assessmentResult: AssessmentResult = {
+  ...baseResult,
+  ...mapRecommendations(baseResult.factors.map((factor) => factor.ruleId), baseResult.rulesVersion),
+};
 /** A fetch that never settles until its request is aborted. */
 export function hangingFetch(_url: RequestInfo | URL, options?: RequestInit): Promise<Response> {
   return new Promise((_resolve, reject) => {

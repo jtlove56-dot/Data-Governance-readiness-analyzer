@@ -9,7 +9,6 @@ import {
   DESCRIPTION_MAX_LENGTH,
   DataType,
   EMPTY_INPUT,
-  CAPABILITY_COPY,
   PURPOSE_LABELS,
   QUESTION_LABELS,
   Purpose,
@@ -19,6 +18,7 @@ import {
   validateQuestions,
 } from "@/lib/assessment";
 import { downloadAssessmentReport, formatAssessedAt } from "@/lib/report";
+import { recommendationReason } from "@/lib/recommendations";
 import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
 
 const STEPS = ["Describe", "Answer questions", "Assessment", "Recommendations"] as const;
@@ -335,7 +335,7 @@ export function AssessmentWizard() {
                 <b className="risk-label"><span className="risk-icon" aria-hidden="true" />{result.level} RISK · {result.score}/100</b>
                 <p>{result.guidance}</p>
               </div>
-              <h3>Recommended protections</h3>
+              <h3>General safeguards</h3>
               {result.recommendationDetails.length > 0 ? (
                 <ol className="recommendation-list">
                   {result.recommendationDetails.map((item) => {
@@ -359,20 +359,23 @@ export function AssessmentWizard() {
               ) : (
                 <p className="empty-state">No tailored safeguards were returned. Apply standard access, minimization, retention, and governance controls before proceeding.</p>
               )}
-              {result.capabilities.length > 0 && (
+              {result.karlsgateRecommendations.length > 0 && (
                 <div className="capability-panel">
-                  <p className="section-number">PRIVACY-ENHANCING CAPABILITY FIT</p>
+                  <p className="section-number">KARLSGATE CAPABILITY FIT</p>
                   <h3>Applicable privacy-enhancing controls</h3>
                   <p>Only capabilities whose documented applicability rules are satisfied are shown.</p>
                   <ul className="capability-list">
-                    {result.capabilities.map((capability) => (
-                      <li key={capability}><b>{capability}</b><p>{CAPABILITY_COPY[capability]}</p></li>
+                    {result.karlsgateRecommendations.map((capability) => (
+                      <li key={capability.id}><b>{capability.label}</b><p>{capability.text}</p>
+                        <p className="recommendation-reason">{recommendationReason(capability, result.factors)}</p>
+                      </li>
                     ))}
                   </ul>
                 </div>
               )}
+              <p className="method-note">Recommendation mapping v{result.mappingVersion}: {result.mappingApprovalStatus === "approved" ? "stakeholder approved" : "stakeholder approval pending"}.</p>
               {result.limitations.length > 0 && <div className="limitations"><h3>Specialist review required</h3>{result.limitations.map((item) => <p key={item}>{item}</p>)}</div>}
-              <details className="summary"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Assessed</dt><dd>{formatAssessedAt(result.assessedAt)}</dd></div></dl></details>
+              <details className="summary"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Scoring rules version</dt><dd>{result.rulesVersion}</dd></div><div><dt>Recommendation mapping version</dt><dd>{result.mappingVersion}</dd></div><div><dt>Assessed</dt><dd>{formatAssessedAt(result.assessedAt)}</dd></div></dl></details>
               {reportError && <p className="error" role="alert">{reportError}</p>}
               <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button className="destructive" type="button" onClick={reset}>Start over</button><button className="primary" type="button" disabled={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
             </div>

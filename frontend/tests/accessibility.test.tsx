@@ -3,7 +3,8 @@ import { StrictMode } from "react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssessmentWizard } from "../components/AssessmentWizard";
-import { BINARY_FIELDS, CAPABILITY_COPY, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
+import { BINARY_FIELDS, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
+import { CAPABILITY_COPY } from "../lib/recommendations";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, saveDraft } from "../lib/session";
 import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-fixture";
 
@@ -160,6 +161,10 @@ describe("assessment flow accessibility", () => {
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
 
     await screen.findByText(/controls before approval/i);
+    expect(screen.getByRole("heading", { name: "General safeguards" })).toBeTruthy();
+    expect(container.querySelector(".recommendation-reason")?.textContent).toMatch(/Relevant to:/);
+    expect(screen.getByText(/Recommendation mapping v1.1: stakeholder approved/)).toBeTruthy();
+    expect(screen.getByText("Recommendation mapping version")).toBeTruthy();
     await expectNoViolations(container);
   });
 
