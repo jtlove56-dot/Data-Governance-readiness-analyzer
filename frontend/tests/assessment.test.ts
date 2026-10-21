@@ -88,6 +88,16 @@ describe("assessment client", () => {
     { ...assessmentResult, recommendationDetails: [{ ...assessmentResult.recommendationDetails[0], riskFactorIds: ["UNKNOWN_RULE"] }] },
     { ...assessmentResult, recommendationDetails: [{ ...assessmentResult.recommendationDetails[0], priority: 2 }] },
     { ...assessmentResult, assessedAt: "not a date" },
+    { ...assessmentResult, mappingVersion: undefined },
+    { ...assessmentResult, mappingVersion: "99.0" },
+    { ...assessmentResult, mappingApprovalStatus: "pending" },
+    { ...assessmentResult, generalSafeguards: [] },
+    { ...assessmentResult, capabilities: [] },
+    { ...assessmentResult, karlsgateRecommendations: [{ ...assessmentResult.karlsgateRecommendations[0], text: "Unsupported claim" }] },
+    { ...assessmentResult, karlsgateRecommendations: [{ ...assessmentResult.karlsgateRecommendations[0], conditionId: "UNKNOWN" }] },
+    { ...assessmentResult, karlsgateRecommendations: [assessmentResult.karlsgateRecommendations[0], assessmentResult.karlsgateRecommendations[0]] },
+    { ...assessmentResult, karlsgateRecommendations: assessmentResult.karlsgateRecommendations.slice(1), capabilities: assessmentResult.capabilities.slice(1) },
+    { ...assessmentResult, karlsgateRecommendations: [...assessmentResult.karlsgateRecommendations].reverse(), capabilities: [...assessmentResult.capabilities].reverse() },
   ])("rejects a malformed API response: %j", async (body) => {
     stubAssessmentApi(new Response(JSON.stringify(body)));
     await expect(requestAssessment(baseline)).rejects.toThrow("invalid response");

@@ -1,11 +1,13 @@
+// @vitest-environment node
+// Node's File already implements text(), slice() and arrayBuffer(); jsdom's does not.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
+import { GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import { DESCRIPTION_MAX_LENGTH } from "../lib/assessment";
 import {
-  ACCEPTED_FILE_TYPES,
   DocumentImportError,
   MAX_FILE_BYTES,
   extractDocumentText,
@@ -16,7 +18,7 @@ const fixture = (name: string) => readFileSync(join(__dirname, "fixtures", name)
 
 // The app gets its worker from the bundler; under the test runner we point
 // pdf.js at the file on disk.
-const pdfWorkerSrc = pathToFileURL(
+GlobalWorkerOptions.workerSrc = pathToFileURL(
   createRequire(import.meta.url).resolve("pdfjs-dist/legacy/build/pdf.worker.min.mjs"),
 ).toString();
 
@@ -35,7 +37,7 @@ describe("document import", () => {
   });
 
   it("extracts text from a PDF", async () => {
-    const imported = await extractDocumentText(fileFrom("brief.pdf", fixture("sample.pdf")), { pdfWorkerSrc });
+    const imported = await extractDocumentText(fileFrom("brief.pdf", fixture("sample.pdf")));
     expect(imported.text).toContain("customer email addresses");
     expect(imported.text).toContain("record matching");
   });
@@ -50,7 +52,12 @@ describe("document import", () => {
     const imported = await extractDocumentText(fileFrom("long.txt", long));
     expect(imported.text.length).toBe(DESCRIPTION_MAX_LENGTH);
     expect(imported.truncated).toBe(true);
-    expect(imported.extractedLength).toBeGreaterThan(DESCRIPTION_MAX_LENGTH);
+  });
+
+  it("marks a text file truncated when only its start is read", async () => {
+    const imported = await extractDocumentText(fileFrom("big.txt", `Short summary.${" ".repeat(70 * 1024)}tail`));
+    expect(imported.text).toBe("Short summary.");
+    expect(imported.truncated).toBe(true);
   });
 
   it("rejects an unsupported file type with advice, not a stack trace", async () => {
@@ -74,18 +81,12 @@ describe("document import", () => {
       "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
       "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n" +
       "trailer\n<< /Size 4 /Root 1 0 R >>\n%%EOF\n";
-    await expect(extractDocumentText(fileFrom("scan.pdf", empty), { pdfWorkerSrc })).rejects.toThrow(/scanned|could not be read/i);
+    await expect(extractDocumentText(fileFrom("scan.pdf", empty))).rejects.toThrow(/scanned|could not be read/i);
   });
 
   it("never leaks the parser's own error text", async () => {
     const broken = fileFrom("broken.docx", "this is not a zip archive");
     await expect(extractDocumentText(broken)).rejects.toThrow(/could not be read/i);
-  });
-
-  it("offers the file types it can actually parse", () => {
-    expect(ACCEPTED_FILE_TYPES).toContain(".pdf");
-    expect(ACCEPTED_FILE_TYPES).toContain(".docx");
-    expect(ACCEPTED_FILE_TYPES).toContain(".txt");
   });
 
   it("tidies whitespace so extracted text reads as prose", () => {

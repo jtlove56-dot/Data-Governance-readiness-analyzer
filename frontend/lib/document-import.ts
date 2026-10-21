@@ -21,7 +21,7 @@ const BY_EXTENSION: Record<string, Kind> = {
 };
 
 /** What the file picker offers, and what the drop zone accepts. */
-export const ACCEPTED_FILE_TYPES = ".pdf,.docx,.txt,.md,.csv";
+export const ACCEPTED_FILE_TYPES = Object.keys(BY_EXTENSION).map((extension) => `.${extension}`).join(",");
 export const ACCEPTED_LABEL = "PDF, Word (.docx), or text";
 
 export class DocumentImportError extends Error {}
@@ -55,31 +55,29 @@ export type ImportedDocument = {
   fileName: string;
   text: string;
   truncated: boolean;
-  /** Characters extracted before any truncation, for the user-facing note. */
-  extractedLength: number;
 };
 
-/**
- * pdf.js needs a worker script. In the app the bundler emits this asset and
- * rewrites the URL; tests pass an explicit path instead, because the test
- * runner resolves `import.meta.url` to an http origin it cannot import.
- */
-export function defaultPdfWorkerSrc(): string {
-  return new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
-}
+/** Source text read so far, and whether the file holds more that was skipped. */
+type Extracted = { raw: string; more: boolean };
 
-async function readPdf(file: File, pdfWorkerSrc?: string): Promise<string> {
+/** Plenty of plain text to fill the description; the rest is never decoded. */
+const TEXT_READ_BYTES = 64 * 1024;
+
+async function readPdf(file: File): Promise<Extracted> {
   // The legacy build carries the polyfills pdf.js 6 needs (Promise.try,
   // Float16Array, Uint8Array.fromBase64). Without it the parser only runs on
   // Chrome 135+/Safari 26+/Node 24+, which our CI and many corporate browsers
   // are not.
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc ?? defaultPdfWorkerSrc();
+  // The bundler emits the worker asset and rewrites this URL. Tests set
+  // workerSrc themselves, because the test runner cannot import this URL.
+  pdfjs.GlobalWorkerOptions.workerSrc ||= new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
   const data = new Uint8Array(await file.arrayBuffer());
   const task = pdfjs.getDocument({ data, useWorkerFetch: false });
   const doc = await task.promise;
   try {
     const pages: string[] = [];
+    // Stop once the description is full rather than parsing the whole document.
     for (let number = 1; number <= doc.numPages; number += 1) {
       const page = await doc.getPage(number);
       const content = await page.getTextContent();
@@ -89,28 +87,31 @@ async function readPdf(file: File, pdfWorkerSrc?: string): Promise<string> {
           .join(" "),
       );
       page.cleanup();
+      const raw = pages.join("\n\n");
+      if (tidy(raw).length > DESCRIPTION_MAX_LENGTH) return { raw, more: number < doc.numPages };
     }
-    return pages.join("\n\n");
+    return { raw: pages.join("\n\n"), more: false };
   } finally {
     await task.destroy();
   }
 }
 
-async function readDocx(file: File): Promise<string> {
+async function readDocx(file: File): Promise<Extracted> {
   // Declared in types/mammoth-browser.d.ts; the browser build keeps parsing local.
   const mammoth = await import("mammoth/mammoth.browser");
   const { value } = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
-  return value;
+  return { raw: value, more: false };
+}
+
+async function readText(file: File): Promise<Extracted> {
+  return { raw: await file.slice(0, TEXT_READ_BYTES).text(), more: file.size > TEXT_READ_BYTES };
 }
 
 /**
  * Reads a file and returns text ready for the description field. Throws a
  * DocumentImportError with a message meant for the person, not a log.
  */
-export async function extractDocumentText(
-  file: File,
-  options: { pdfWorkerSrc?: string } = {},
-): Promise<ImportedDocument> {
+export async function extractDocumentText(file: File): Promise<ImportedDocument> {
   const kind = kindFor(file);
 
   if (file.size === 0) {
@@ -121,17 +122,15 @@ export async function extractDocumentText(
     throw new DocumentImportError(`That file is larger than ${limit} MB. Upload a smaller one, or paste the relevant part.`);
   }
 
-  let raw: string;
+  let extracted: Extracted;
   try {
-    if (kind === "pdf") raw = await readPdf(file, options.pdfWorkerSrc);
-    else if (kind === "docx") raw = await readDocx(file);
-    else raw = await file.text();
+    extracted = await (kind === "pdf" ? readPdf(file) : kind === "docx" ? readDocx(file) : readText(file));
   } catch {
     // Never surface the parser's own error: it can quote file contents.
     throw new DocumentImportError("That file could not be read. It may be protected or damaged—try another, or type the description instead.");
   }
 
-  const text = tidy(raw);
+  const text = tidy(extracted.raw);
   if (!text) {
     throw new DocumentImportError(
       kind === "pdf"
@@ -140,11 +139,9 @@ export async function extractDocumentText(
     );
   }
 
-  const truncated = text.length > DESCRIPTION_MAX_LENGTH;
   return {
     fileName: file.name,
-    text: truncated ? text.slice(0, DESCRIPTION_MAX_LENGTH) : text,
-    truncated,
-    extractedLength: text.length,
+    text: text.slice(0, DESCRIPTION_MAX_LENGTH),
+    truncated: extracted.more || text.length > DESCRIPTION_MAX_LENGTH,
   };
 }

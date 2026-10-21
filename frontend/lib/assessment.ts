@@ -1,3 +1,5 @@
+import { matchesRecommendationResult, type RecommendationResult } from "./recommendations";
+
 export const DATA_TYPE_LABELS = {
   names: "Names",
   emails: "Email addresses",
@@ -27,19 +29,6 @@ export const QUESTION_LABELS = {
   purpose: "What is the intended use?",
 } as const;
 
-/** Approved copy from docs/risk-scoring-rubric-v1.0.md (SCRUM-6), keyed by API capability label. Do not reword without product-owner approval. */
-export const CAPABILITY_COPY: Record<string, string> = {
-  "Protected matching":
-    "Identify records shared across parties without transferring raw identifiers to the other party.",
-  "Re-identification risk remediation":
-    "Measure how dataset combination could reveal a person or sensitive attribute, then reduce that risk before release.",
-  "De-identification":
-    "Transform sensitive records so directly identifying values are not exposed during the approved workflow.",
-  "Data minimization":
-    "Limit collection, processing, and disclosure to fields required for the documented purpose.",
-  "Governance policy execution":
-    "Turn approved purpose, access, retention, and deletion rules into enforceable workflow controls and evidence.",
-};
 
 export type DataType = keyof typeof DATA_TYPE_LABELS;
 export type Purpose = keyof typeof PURPOSE_LABELS;
@@ -73,7 +62,7 @@ export type RecommendationDetail = {
   riskFactorIds: string[];
 };
 
-export type AssessmentResult = {
+export type AssessmentResult = RecommendationResult & {
   schemaVersion: string;
   rulesVersion: string;
   score: number;
@@ -176,9 +165,11 @@ function isAssessmentResult(value: unknown): value is AssessmentResult {
   const factors = value.factors as RiskFactor[];
   const factorIdList = factors.map((factor) => factor.ruleId);
   if (!hasUniqueValues(factorIdList)) return false;
+  if (!matchesRecommendationResult(value, factorIdList, value.rulesVersion as string)) return false;
+  const mapped = value as unknown as RecommendationResult;
+  if (JSON.stringify(value.capabilities) !== JSON.stringify(mapped.karlsgateRecommendations.map((item) => item.label))) return false;
   const factorIds = new Set(factorIdList);
   const details = value.recommendationDetails as RecommendationDetail[];
-  const capabilities = value.capabilities as string[];
   const score = value.score as number;
   const level = value.level as RiskLevel;
   const rawScore = factors.reduce((sum, factor) => sum + factor.points, 0);
@@ -187,8 +178,6 @@ function isAssessmentResult(value: unknown): value is AssessmentResult {
   return score === Math.min(100, rawScore)
     && level === expectedLevel
     && hasUniqueValues(details.map((detail) => detail.id))
-    && hasUniqueValues(capabilities)
-    && capabilities.every((capability) => Object.hasOwn(CAPABILITY_COPY, capability))
     && details.every((detail, index) => detail.priority === index + 1
       && hasUniqueValues(detail.riskFactorIds)
       && detail.riskFactorIds.every((ruleId) => factorIds.has(ruleId)));

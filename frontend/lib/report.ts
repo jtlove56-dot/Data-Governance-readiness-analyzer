@@ -2,12 +2,12 @@ import {
   AssessmentInput,
   AssessmentResult,
   BINARY_FIELDS,
-  CAPABILITY_COPY,
   DATA_TYPE_LABELS,
   PURPOSE_LABELS,
   QUESTION_LABELS,
   RiskLevel,
 } from "./assessment";
+import { recommendationReason } from "./recommendations";
 import { PALETTE, RISK_COLORS } from "./theme";
 
 // Built and rendered in the browser, never uploaded (docs/data-handling.md). buildReportModel is pure and omits internal rule ids.
@@ -78,11 +78,11 @@ export function buildReportModel(
     },
   ];
 
-  if (result.capabilities.length) {
+  if (result.karlsgateRecommendations.length) {
     sections.push({
-      heading: "Privacy-enhancing capability fit",
+      heading: "Karlsgate capability fit",
       kind: "list",
-      items: result.capabilities.map((capability) => `${capability}: ${CAPABILITY_COPY[capability]}`),
+      items: result.karlsgateRecommendations.map((item) => `${item.label}: ${item.text} ${recommendationReason(item, result.factors)}`),
     });
   }
 
@@ -101,6 +101,8 @@ export function buildReportModel(
     meta: [
       { label: "Assessed", value: formatAssessedAt(result.assessedAt) },
       { label: "Scoring rules version", value: result.rulesVersion },
+      { label: "Recommendation mapping version", value: result.mappingVersion },
+      { label: "Mapping approval", value: result.mappingApprovalStatus === "approved" ? "Approved" : "Stakeholder approval pending" },
     ],
     risk: { level: result.level, score: result.score },
     sections,
