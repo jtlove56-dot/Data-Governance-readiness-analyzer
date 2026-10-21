@@ -141,6 +141,16 @@ describe("assessment flow accessibility", () => {
     expect(document.querySelector("#assessment")).not.toBeNull();
   });
 
+  it("exposes the document upload with a labelled control and help text", () => {
+    const { container } = render(<AssessmentWizard />);
+    const input = container.querySelector("#document-upload") as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.getAttribute("accept")).toContain(".pdf");
+    expect(input.getAttribute("aria-describedby")).toBe("upload-help");
+    expect(document.querySelector("#upload-help")?.textContent).toMatch(/never uploaded/i);
+    expect(screen.getByRole("button", { name: /choose file/i })).toBeTruthy();
+  });
+
   it("announces the current step through a status region", () => {
     render(<AssessmentWizard />);
     expect(screen.getByRole("status").textContent).toContain("Step 1 of 4");
