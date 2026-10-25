@@ -1,5 +1,9 @@
 # Data Governance Readiness Analyzer
 
+> **SCRUM 22 draft review:** start with [README-SCRUM-22.md](README-SCRUM-22.md).
+> Local login: **http://localhost:3002/login**. Real sign-in needs Supabase configuration.
+> The original project instructions below describe the pre-authentication baseline.
+
 A guided, plain-language assessment for identifying privacy and governance risks before a proposed data use case moves forward.
 
 ## Architecture
