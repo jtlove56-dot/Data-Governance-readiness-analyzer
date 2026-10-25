@@ -17,7 +17,7 @@ from app.scoring.models import (
     RecommendationDetail,
     RiskFactor,
 )
-from app.scoring.recommendations import CURRENT_MAPPING_VERSION, map_recommendations
+from app.scoring.recommendations import map_recommendations
 from app.scoring.rules import RuleSet, get_ruleset
 
 
@@ -25,7 +25,6 @@ def score_assessment(
     request: AssessmentRequest,
     ruleset: RuleSet | None = None,
     assessed_at: str | None = None,
-    mapping_version: str = CURRENT_MAPPING_VERSION,
 ) -> AssessmentResponse:
     ruleset = ruleset or get_ruleset()
 
@@ -40,7 +39,7 @@ def score_assessment(
     level = ruleset.thresholds.level_for(score)
     guidance = ruleset.guidance_by_level[level]
 
-    mapped = map_recommendations([factor.ruleId for factor in factors], ruleset.version, mapping_version)
+    mapped = map_recommendations([factor.ruleId for factor in factors], ruleset.version)
 
     fired_rule_ids = {factor.ruleId for factor in factors}
     recommendation_rules = [rule for rule in ruleset.recommendations if rule.applies(request)]

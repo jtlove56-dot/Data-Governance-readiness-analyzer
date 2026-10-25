@@ -18,6 +18,12 @@ import {
   validateQuestions,
 } from "@/lib/assessment";
 import { downloadAssessmentReport, formatAssessedAt } from "@/lib/report";
+import {
+  ACCEPTED_FILE_TYPES,
+  ACCEPTED_LABEL,
+  DocumentImportError,
+  extractDocumentText,
+} from "@/lib/document-import";
 import { recommendationReason } from "@/lib/recommendations";
 import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
 
@@ -62,9 +68,14 @@ export function AssessmentWizard() {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<{ kind: "notice" | "error"; message: string } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const mainHeading = useRef<HTMLHeadingElement>(null);
   const pendingAssessment = useRef<AbortController | null>(null);
   const pendingReport = useRef<AbortController | null>(null);
+  const pendingImport = useRef<AbortController | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const factorLabelsById = useMemo(
     () => new Map(result?.factors.map((factor) => [factor.ruleId, factor.label]) ?? []),
@@ -76,8 +87,11 @@ export function AssessmentWizard() {
     pendingAssessment.current = null;
     pendingReport.current?.abort();
     pendingReport.current = null;
+    pendingImport.current?.abort();
+    pendingImport.current = null;
     setLoading(false);
     setDownloading(false);
+    setImporting(false);
   }, []);
 
   useEffect(() => cancelPendingWork, [cancelPendingWork]);
@@ -90,6 +104,7 @@ export function AssessmentWizard() {
     setMaxReached(0);
     setError(null);
     setReportError(null);
+    setImportStatus(null);
     clearDraft();
   }, [cancelPendingWork]);
 
@@ -203,6 +218,40 @@ export function AssessmentWizard() {
     }
   };
 
+  const importDocument = async (file: File | undefined) => {
+    if (!file || pendingImport.current) return;
+    // Parsing cannot be interrupted, so a reset or idle timeout discards the result instead.
+    const controller = new AbortController();
+    pendingImport.current = controller;
+    setImporting(true);
+    setImportStatus(null);
+    try {
+      const imported = await extractDocumentText(file);
+      if (controller.signal.aborted) return;
+      update("description", imported.text);
+      setImportStatus({
+        kind: "notice",
+        message: imported.truncated
+          ? `Added the first ${DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")} characters of ${imported.fileName}. Edit it down to the part that matters.`
+          : `Added the text from ${imported.fileName}. Check it before continuing.`,
+      });
+    } catch (failure) {
+      if (controller.signal.aborted) return;
+      setImportStatus({
+        kind: "error",
+        message: failure instanceof DocumentImportError
+          ? failure.message
+          : "That file could not be read. Try another, or type the description instead.",
+      });
+    } finally {
+      if (pendingImport.current === controller) {
+        pendingImport.current = null;
+        setImporting(false);
+      }
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  };
+
   const progress = ((step + 1) / STEPS.length) * 100;
 
   return (
@@ -262,6 +311,49 @@ export function AssessmentWizard() {
               </label>
               <div className="field-meta" id="description-help"><span>A clear sentence or two is enough. Avoid names or other identifying details.</span><span>{input.description.length} / {DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")}</span></div>
               {error && <p className="error" id="description-error" role="alert">{error}</p>}
+
+              <div
+                className={dragging ? "dropzone dragging" : "dropzone"}
+                onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragging(false);
+                  void importDocument(event.dataTransfer.files[0]);
+                }}
+              >
+                <div>
+                  <p className="dropzone-title">Have a document already?</p>
+                  <p className="dropzone-help" id="upload-help">
+                    Drop {ACCEPTED_LABEL} here, or choose a file. It is read in this browser and never uploaded.
+                  </p>
+                </div>
+                <label className="sr-only" htmlFor="document-upload">
+                  Upload a document to fill in the description ({ACCEPTED_LABEL})
+                </label>
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={importing}
+                  onClick={() => fileInput.current?.click()}
+                >
+                  {importing ? "Reading\u2026" : "Choose file"}
+                </button>
+                <input
+                  ref={fileInput}
+                  id="document-upload"
+                  type="file"
+                  className="sr-only"
+                  accept={ACCEPTED_FILE_TYPES}
+                  aria-describedby="upload-help"
+                  onChange={(event) => void importDocument(event.target.files?.[0])}
+                />
+              </div>
+              <p className="method-note import-status" aria-live="polite">{importing ? "Reading your document\u2026" : importStatus?.kind === "notice" ? importStatus.message : ""}</p>
+              {importStatus?.kind === "error" && <p className="error" role="alert">{importStatus.message}</p>}
+
               <p className="method-note" id="retention-notice">{RETENTION_NOTICE}</p>
               <div className="actions end"><button className="primary" type="button" onClick={() => moveTo(1)}>Continue <span>→</span></button></div>
             </div>

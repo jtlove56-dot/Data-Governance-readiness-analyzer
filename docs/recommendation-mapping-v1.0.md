@@ -11,7 +11,7 @@ Status: **implemented proposal; stakeholder approval pending**. The SCRUM-6 rubr
 
 `backend/app/scoring/mappings/v1.0.json` contains the stable control IDs, wording, factor associations, baseline controls, capability conditions, scoring-version compatibility, and approval status. The backend validates references and full scoring-factor coverage when loading a catalog. Unsupported factors or versions fail explicitly rather than producing guessed recommendations.
 
-`frontend/lib/mappings/v1.0.json` is a generated copy so the offline fallback and independently built frontend Docker image use the same catalog. Do not edit the generated copy. From the repository root:
+The frontend receives a generated copy of the current catalog only (`frontend/lib/mappings/`), used to validate API responses. Do not edit the generated copy. From the repository root:
 
 ```sh
 python scripts/sync-recommendation-mappings.py

@@ -1,6 +1,6 @@
 # Data handling and retention (v1.0)
 
-> Historical baseline. In this local SCRUM 22 copy, authentication is required and session metadata
+> Historical baseline. On the SCRUM 22 review branch, authentication is required and session metadata
 > is stored separately. See [SCRUM 22](../README-SCRUM-22.md) for the current account/session policy.
 > Assessment answers remain unsaved on the server. Logout and account changes also clear local drafts.
 

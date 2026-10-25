@@ -1,7 +1,7 @@
 # Data Governance Readiness Analyzer
 
-> **SCRUM 22 local working copy:** start with [README-SCRUM-22.md](README-SCRUM-22.md).
-> Login: **http://localhost:3002/login**. This copy is not connected to GitHub.
+> **SCRUM 22 draft review:** start with [README-SCRUM-22.md](README-SCRUM-22.md).
+> Local login: **http://localhost:3002/login**. Real sign-in needs Supabase configuration.
 > The original project instructions below describe the pre-authentication baseline.
 
 A guided, plain-language assessment for identifying privacy and governance risks before a proposed data use case moves forward.
@@ -71,4 +71,4 @@ Deployment configuration and environment requirements are documented in [docs/de
 The approved risk-to-safeguard mapping is integrated with assessment API schema v2.
 See [mapping v1.1](docs/recommendation-mapping-v1.1.md) for approval, applicability,
 and result traceability. Scoring remains server-only; general safeguards and
-Karlsgate-specific recommendations are kept separate. This work targets `dev`.
+Karlsgate-specific recommendations are kept separate.

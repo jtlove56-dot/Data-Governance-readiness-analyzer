@@ -1,5 +1,4 @@
-import { CAPABILITY_COPY, matchesRecommendationResult, type RecommendationResult } from "./recommendations";
-export { CAPABILITY_COPY } from "./recommendations";
+import { matchesRecommendationResult, type RecommendationResult } from "./recommendations";
 
 export const DATA_TYPE_LABELS = {
   names: "Names",
@@ -171,7 +170,6 @@ function isAssessmentResult(value: unknown): value is AssessmentResult {
   if (JSON.stringify(value.capabilities) !== JSON.stringify(mapped.karlsgateRecommendations.map((item) => item.label))) return false;
   const factorIds = new Set(factorIdList);
   const details = value.recommendationDetails as RecommendationDetail[];
-  const capabilities = value.capabilities as string[];
   const score = value.score as number;
   const level = value.level as RiskLevel;
   const rawScore = factors.reduce((sum, factor) => sum + factor.points, 0);
@@ -180,8 +178,6 @@ function isAssessmentResult(value: unknown): value is AssessmentResult {
   return score === Math.min(100, rawScore)
     && level === expectedLevel
     && hasUniqueValues(details.map((detail) => detail.id))
-    && hasUniqueValues(capabilities)
-    && capabilities.every((capability) => Object.hasOwn(CAPABILITY_COPY, capability))
     && details.every((detail, index) => detail.priority === index + 1
       && hasUniqueValues(detail.riskFactorIds)
       && detail.riskFactorIds.every((ruleId) => factorIds.has(ruleId)));
@@ -204,7 +200,6 @@ export function toScoringPayload(input: AssessmentInput): Omit<AssessmentInput, 
 }
 
 export async function requestAssessment(input: AssessmentInput, signal?: AbortSignal): Promise<AssessmentResult> {
-
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });

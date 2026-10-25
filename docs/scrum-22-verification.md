@@ -1,6 +1,30 @@
 # SCRUM 22 Local Verification
 
-Date: October 21, 2026. Scope: local implementation only; nothing published to GitHub.
+## October 25: GitHub Review Preparation
+
+Integrated the implementation with `dev` at eb1e00b in branch `scrum-22-authentication`.
+The draft PR targets `dev`, not `main`. No production deployment is requested.
+
+- Backend: 89 tests passed; Ruff and recommendation-mapping synchronization passed.
+- Frontend: 141 tests passed across nine test files, including the team's document-import tests.
+- ESLint and TypeScript passed; the Next.js 16.4.3 production build passed.
+- Updated Next.js/eslint-config-next from 16.4.0 to 16.4.3 and patched transitive DOMPurify/Zod.
+  The npm dependency audit reports zero vulnerabilities after the update.
+- Reviewed the tracked file list and scanned for recognizable credential/private-key patterns.
+  Real environment files, session databases, dependency directories, and local artifacts are excluded.
+- Windows sandbox temporary-file errors were resolved by using a workspace temp directory.
+  The successful frontend run used `vitest run --maxWorkers=1`; backend pytest used an isolated `--basetemp`.
+- Browser evidence below is from October 21, not a newly repeated end-to-end run on this branch.
+- Real Supabase sign-in and hosted HTTPS/storage acceptance checks remain outstanding. Keep the PR draft.
+
+Dependency advisory references: [Next.js](https://github.com/advisories/GHSA-2464-fhr4-w9xw),
+[DOMPurify](https://github.com/advisories/GHSA-cg2g-xh64-v4q7),
+[Zod](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5).
+An audit result is a point-in-time dependency check, not a security certification.
+
+## October 21: Original Local Verification
+
+Scope at that date: local implementation only; nothing had been published to GitHub.
 
 ## Results
 

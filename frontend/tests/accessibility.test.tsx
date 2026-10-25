@@ -3,7 +3,8 @@ import { StrictMode } from "react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssessmentWizard } from "../components/AssessmentWizard";
-import { BINARY_FIELDS, CAPABILITY_COPY, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
+import { BINARY_FIELDS, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
+import { CAPABILITY_COPY } from "../lib/recommendations";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, saveDraft } from "../lib/session";
 import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-fixture";
 
@@ -119,6 +120,21 @@ describe("assessment flow accessibility", () => {
     expect((screen.getByLabelText(/use-case description/i) as HTMLTextAreaElement).value).toBe("");
   });
 
+  it("discards a document import that finishes after idle expiry", async () => {
+    vi.useFakeTimers();
+    let finishReading!: (text: string) => void;
+    const reading = new Promise<string>((done) => { finishReading = done; });
+    // Only the members the text reader touches; jsdom's File cannot read its contents.
+    const file = { name: "brief.txt", size: 20, slice: () => ({ text: () => reading }) } as unknown as File;
+    const { container } = render(<AssessmentWizard />);
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    fireEvent.change(container.querySelector("#document-upload")!, { target: { files: [file] } });
+    await act(async () => vi.advanceTimersByTimeAsync(IDLE_TIMEOUT_MS));
+    await act(async () => finishReading("Late private description."));
+    expect((screen.getByLabelText(/use-case description/i) as HTMLTextAreaElement).value).toBe("");
+    expect(window.sessionStorage.getItem(DRAFT_KEY)).toBeNull();
+  });
+
   it("aborts scoring when the wizard unmounts", async () => {
     vi.mocked(fetch).mockImplementationOnce(hangingFetch);
     const view = render(<AssessmentWizard />);
@@ -139,6 +155,17 @@ describe("assessment flow accessibility", () => {
     const skip = screen.getByRole("link", { name: /skip to the assessment/i });
     expect(skip.getAttribute("href")).toBe("#assessment");
     expect(document.querySelector("#assessment")).not.toBeNull();
+  });
+
+  it("exposes the document upload with a labelled control and help text", async () => {
+    const { container } = render(<AssessmentWizard />);
+    const input = container.querySelector("#document-upload") as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.getAttribute("accept")).toContain(".pdf");
+    expect(input.getAttribute("aria-describedby")).toBe("upload-help");
+    expect(document.querySelector("#upload-help")?.textContent).toMatch(/never uploaded/i);
+    expect(screen.getByRole("button", { name: /choose file/i })).toBeTruthy();
+    await expectNoViolations(container);
   });
 
   it("announces the current step through a status region", () => {

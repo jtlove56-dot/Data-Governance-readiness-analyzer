@@ -1,10 +1,11 @@
-# SCRUM 22: Local Authentication Integration
+# SCRUM 22: Authentication Integration (Draft Review)
 
 Open **http://localhost:3002/login** after running `Start-SCRUM-22.ps1`.
 
-This is a standalone local copy of the integrated SCRUM 12 branch at ad0988b.
-It has no `.git` directory or remote. Nothing in this folder has been pushed to GitHub.
-The existing `scrum 9` and `scrum 12` folders are unchanged.
+Review branch: `scrum-22-authentication`, targeting `dev`.
+This implementation started from SCRUM 12 at ad0988b and incorporates the team's
+current `dev` at eb1e00b, including document import and recommendation cleanup.
+It is ready for code review, not production deployment or ticket closure.
 
 ## Status and Scope
 
@@ -28,7 +29,8 @@ Account registration/recovery UI, MFA, organization roles, and saved assessment 
 ## First-Time Setup (PowerShell)
 
 ```powershell
-cd 'C:\Users\mideo\Downloads\Karlsgate project\scrum 22'
+git clone --branch scrum-22-authentication https://github.com/jtlove56-dot/Data-Governance-readiness-analyzer.git
+cd Data-Governance-readiness-analyzer
 python -m venv backend/.venv
 backend/.venv/Scripts/python.exe -m pip install -e './backend[dev]'
 cd frontend
@@ -84,6 +86,16 @@ npm run lint
 npm run build
 ```
 
-Before a later PR to `dev`: obtain stakeholder agreement on session durations and account provisioning,
+Before marking this draft ready to merge into `dev`: obtain stakeholder agreement on session durations and account provisioning,
 integrate production storage, run a real Supabase/HTTPS end-to-end test, and coordinate with SCRUM 16 and
 the owner of final deployment testing. A login feature does not add saved assessment history.
+
+## Review Checklist
+
+- Check the frontend proxy and server-side assessment protection, including direct unauthorized requests.
+- Review logout revocation, idle/absolute expiry, encrypted session storage, and draft isolation.
+- Confirm the test-only identity provider is confined to the test suite and explicitly launched fixture.
+- Run the commands above and inspect generic error handling for accidental secret disclosure.
+- Obtain two independent peer approvals and complete a substantive review of a teammate's work
+  as required by the course. Creating this PR does not count as either approval.
+- Do not deploy this branch over the existing demo: hosted authentication intentionally fails closed.

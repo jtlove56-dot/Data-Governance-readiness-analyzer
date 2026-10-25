@@ -20,4 +20,3 @@ export function notifyAuthChange() {
   // Only a random notification is persisted, never identity, credentials or answers.
   try { localStorage.setItem(AUTH_EVENT, crypto.randomUUID()); } catch { /* Best effort across tabs. */ }
 }
-
