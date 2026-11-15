@@ -1,7 +1,8 @@
 import { AUTH_MESSAGES } from "@/lib/auth-messages";
-import { AuthenticationError, accountError, json, sameOriginPost, serverAuth } from "@/lib/auth-server";
+import { AuthenticationError, accountError, json, requireAuthQuota, sameOriginPost, serverAuth } from "@/lib/auth-server";
 
 export const POST = sameOriginPost(async (request) => {
+  requireAuthQuota(request, "confirm");
   const input = await request.json().catch(() => null);
   const tokenHash = typeof input?.tokenHash === "string" ? input.tokenHash : "";
   const type = input?.type === "email" || input?.type === "recovery" ? (input.type as "email" | "recovery") : null;

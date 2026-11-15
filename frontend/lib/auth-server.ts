@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createSupabaseClient } from "./supabase";
 import { AUTH_MESSAGES } from "./auth-messages";
+import { RATE_LIMIT_WINDOW_MS, allowRequest, authRateLimit, clientAddress } from "./rate-limit";
 import type { AuthSession } from "./auth-client";
 
 export const NO_STORE = { "Cache-Control": "no-store, private" };
@@ -86,14 +87,21 @@ export function accountError(error: { status?: number; code?: string }, clientFa
   return new AuthenticationError(503, AUTH_MESSAGES.unavailable);
 }
 
-export function json(body: unknown, status = 200) {
-  return NextResponse.json(body, { status, headers: NO_STORE });
+export function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
+  return NextResponse.json(body, { status, headers: { ...headers, ...NO_STORE } });
 }
 
 export function errorResponse(error: unknown) {
-  return error instanceof AuthenticationError
-    ? json({ message: error.message }, error.status)
-    : json({ message: AUTH_MESSAGES.unavailable }, 503);
+  if (!(error instanceof AuthenticationError)) return json({ message: AUTH_MESSAGES.unavailable }, 503);
+  const retry = error.status === 429 ? { "Retry-After": String(RATE_LIMIT_WINDOW_MS / 1000) } : undefined;
+  return json({ message: error.message }, error.status, retry);
+}
+
+/** Throttles repeated account requests from one visitor before they reach Supabase. */
+export function requireAuthQuota(request: Request, route: string) {
+  if (!allowRequest(`${route}:${clientAddress(request)}`, authRateLimit())) {
+    throw new AuthenticationError(429, AUTH_MESSAGES.rateLimited);
+  }
 }
 
 function hostOrigin(request: Request, origin: URL) {

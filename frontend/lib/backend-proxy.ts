@@ -12,8 +12,10 @@ export async function forwardAssessment(request: Request, path: string, headers:
     duplex: "half",
     signal: AbortSignal.any([request.signal, AbortSignal.timeout(12000)]),
   } as RequestInit & { duplex: "half" });
+  // Pass on the backend's rate-limit hint so callers know when to retry.
+  const retryAfter = response.headers.get("retry-after");
   return new Response(response.body, {
     status: response.status,
-    headers: { "Content-Type": "application/json", ...NO_STORE },
+    headers: { "Content-Type": "application/json", ...(retryAfter ? { "Retry-After": retryAfter } : {}), ...NO_STORE },
   });
 }

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "data-governance-readiness-api"
 version = "0.1.0"
 description = "FastAPI service for the Data Governance Readiness Analyzer"
-requires-python = ">=3.9"
+requires-python = ">=3.12,<3.13"
 dependencies = [
   "PyJWT[crypto]>=2.10,<3.0",
   "fastapi>=0.115,<1.0",
@@ -32,4 +32,4 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 110
-target-version = "py39"
+target-version = "py312"

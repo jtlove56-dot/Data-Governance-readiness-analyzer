@@ -22,15 +22,19 @@ Press `Ctrl+C` to stop the frontend and backend.
 
 ### Backend
 
+The backend requires Python 3.12, the version CI tests.
+
 ```bash
 cd backend
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 uvicorn app.main:app --reload --port 8000 --env-file .env
 ```
 
-Check `http://localhost:8000/health` or `http://localhost:8000/version`.
+Check `http://localhost:8000/health` or `http://localhost:8000/version`. Interactive API docs
+(`/docs`, `/redoc`, `/openapi.json`) are served only when `APP_ENV` is `local` or `development`;
+any other value, or no value, hides them.
 
 ### Frontend
 
@@ -74,6 +78,16 @@ cd backend
 
 Deploy `frontend/` and `backend/` separately over HTTPS, set the variables from each `.env.example`,
 and point `API_BASE_URL` at the backend. Do not commit credentials or production-sensitive data.
+
+### Security defaults
+
+- The frontend sends a Content Security Policy, `X-Frame-Options: DENY`, and
+  `Referrer-Policy: strict-origin-when-cross-origin` on every route (`frontend/next.config.ts`).
+- Sign-in, sign-up, and password routes allow `AUTH_RATE_LIMIT_PER_MINUTE` attempts (default 10)
+  per visitor, per route, per minute. Supabase Auth applies its own limits behind them.
+- Signed-in scoring allows `ASSESSMENT_RATE_PER_USER` assessments (default 60) per account per minute.
+- Throttled requests receive `429 Too Many Requests` with a plain-language message and `Retry-After`.
+- Counters live in each server instance's memory, so they slow bursts rather than set an exact global quota.
 
 Supabase manages login and refresh sessions. Next.js uses `@supabase/ssr` cookies and
 FastAPI verifies access-token signatures through the project's JWKS endpoint.

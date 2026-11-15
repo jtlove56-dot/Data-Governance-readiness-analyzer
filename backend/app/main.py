@@ -7,10 +7,10 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.auth import TokenVerifier, require_session
+from app.auth import TokenVerifier
 from app.config import Settings
 from app.logging_config import configure_logging, logger
-from app.rate_limit import SlidingWindowLimiter, require_demo_quota
+from app.rate_limit import SlidingWindowLimiter, require_assessment_quota, require_demo_quota
 from app.request_limits import RequestBodyLimitMiddleware
 from app.scoring import AssessmentRequest, AssessmentResponse, score_assessment
 
@@ -30,9 +30,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Transparent rule-based privacy risk-scoring service.",
         version=settings.version,
         lifespan=lifespan,
+        docs_url="/docs" if settings.docs_enabled else None,
+        redoc_url="/redoc" if settings.docs_enabled else None,
+        openapi_url="/openapi.json" if settings.docs_enabled else None,
     )
 
     app.state.demo_limiter = SlidingWindowLimiter(settings.demo_rate_per_client, settings.demo_rate_total)
+    app.state.assessment_limiter = SlidingWindowLimiter(settings.assessment_rate_per_user)
     app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_bytes)
 
     @app.exception_handler(HTTPException)
@@ -45,7 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(
             status_code=exc.status_code,
             content={"error": error, "message": exc.detail, "requestId": request_id},
-            headers={"Cache-Control": "no-store"},
+            headers={**(exc.headers or {}), "Cache-Control": "no-store"},
         )
 
     @app.exception_handler(RequestValidationError)
@@ -83,7 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"version": settings.version}
 
     @app.post("/assessments", response_model=AssessmentResponse, tags=["assessment"],
-              dependencies=[Depends(require_session)])
+              dependencies=[Depends(require_assessment_quota)])
     def create_assessment(payload: AssessmentRequest, response: Response) -> AssessmentResponse:
         return _score(payload, response, demo=False)
 
