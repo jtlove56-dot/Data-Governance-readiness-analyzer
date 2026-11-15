@@ -1,6 +1,6 @@
 # Data handling and retention (v1.0)
 
-Implements SCRUM-16. The analyzer assesses potentially sensitive use cases, so it applies the same data-minimization principle it recommends.
+The analyzer assesses potentially sensitive use cases, so it applies the same data-minimization principle it recommends.
 
 ## Decision
 

@@ -9,7 +9,7 @@ import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-
 import { expectNoViolations } from "./axe";
 
 /**
- * Accessibility checks for the assessment flow (SCRUM-17).
+ * Accessibility checks for the assessment flow.
  *
  * axe-core catches the machine-checkable WCAG failures. Colour contrast
  * cannot be judged in jsdom, so it is excluded here.

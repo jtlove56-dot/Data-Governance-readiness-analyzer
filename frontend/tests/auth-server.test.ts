@@ -11,6 +11,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [], set: mocks.setCookie }) }));
 import { currentSession, sameOrigin } from "../lib/auth-server";
+import { allowRequest, resetRateLimits } from "../lib/rate-limit";
 import { POST as login } from "../app/api/login/route";
 import { POST as logout } from "../app/api/logout/route";
 import { POST as signup } from "../app/api/signup/route";
@@ -25,6 +26,7 @@ import { NextRequest } from "next/server";
 
 beforeEach(() => {
   vi.resetAllMocks();
+  resetRateLimits();
   vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("SUPABASE_PUBLISHABLE_KEY", "publishable-test-key");
   vi.stubEnv("API_BASE_URL", "http://localhost:8000");
@@ -155,6 +157,14 @@ describe("Supabase authentication routes", () => {
     expect((await assessDemo(request("demo/assessments", "https://attacker.test"))).status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
     expect((await assessDemo(request("demo/assessments"))).status).toBe(429);
+  });
+
+  it("passes the backend's Retry-After hint on to the browser", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      Response.json({ error: "rate_limited" }, { status: 429, headers: { "Retry-After": "60" } })));
+    const response = await assess(request("assessments"));
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("60");
   });
 
   it("does not trust an unverified cookie session", async () => {
@@ -335,5 +345,57 @@ describe("account creation and recovery", () => {
     const response = await updatePassword(request("update-password", undefined, { password: NEW_PASSWORD }));
     expect(response.status).toBe(401);
     expect(mocks.updateUser).not.toHaveBeenCalled();
+  });
+});
+
+describe("account rate limiting", () => {
+  const from = (address: string) => ({ "X-Forwarded-For": address });
+
+  beforeEach(() => {
+    mocks.signUp.mockResolvedValue({ data: {}, error: null });
+    mocks.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
+    vi.stubEnv("AUTH_RATE_LIMIT_PER_MINUTE", "2");
+  });
+
+  it("throttles repeated sign-in attempts with a clear 429 before calling Supabase", async () => {
+    const attempt = () => login(request("login", undefined, undefined, from("203.0.113.7")));
+    expect((await attempt()).status).toBe(200);
+    expect((await attempt()).status).toBe(200);
+    const limited = await attempt();
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    expect(limited.headers.get("cache-control")).toMatch(/no-store/);
+    expect(await limited.json()).toEqual({ message: "Too many attempts. Please try again later." });
+    expect(mocks.signInWithPassword).toHaveBeenCalledTimes(2);
+  });
+
+  it("limits each visitor separately", async () => {
+    for (let index = 0; index < 2; index += 1) await login(request("login", undefined, undefined, from("203.0.113.7")));
+    expect((await login(request("login", undefined, undefined, from("203.0.113.7")))).status).toBe(429);
+    expect((await login(request("login", undefined, undefined, from("198.51.100.2")))).status).toBe(200);
+  });
+
+  it.each([
+    ["signup", () => signup(request("signup", undefined, { email: "a@example.test", password: "x" }, from("192.0.2.1")))],
+    ["forgot-password", () => forgotPassword(request("forgot-password", undefined, { email: "a@example.test" }, from("192.0.2.1")))],
+    ["confirm", () => confirm(request("confirm", undefined, { tokenHash: "", type: "email" }, from("192.0.2.1")))],
+    ["update-password", () => updatePassword(request("update-password", undefined, { password: "x" }, from("192.0.2.1")))],
+  ])("throttles %s", async (_route, call) => {
+    await call();
+    await call();
+    expect((await call()).status).toBe(429);
+  });
+
+  it("does not count cross-site requests against the visitor", async () => {
+    for (let index = 0; index < 5; index += 1) {
+      expect((await login(request("login", "https://attacker.test", undefined, from("203.0.113.7")))).status).toBe(403);
+    }
+    expect((await login(request("login", undefined, undefined, from("203.0.113.7")))).status).toBe(200);
+  });
+
+  it("forgets requests once the window has passed", () => {
+    expect(allowRequest("window", 1, 0)).toBe(true);
+    expect(allowRequest("window", 1, 30_000)).toBe(false);
+    expect(allowRequest("window", 1, 60_001)).toBe(true);
   });
 });

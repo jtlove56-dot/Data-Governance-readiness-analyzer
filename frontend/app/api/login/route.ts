@@ -1,9 +1,12 @@
 import { AUTH_MESSAGES } from "@/lib/auth-messages";
-import { AuthenticationError, errorResponse, json, requireSameOrigin, serverAuth } from "@/lib/auth-server";
+import {
+  AuthenticationError, errorResponse, json, requireAuthQuota, requireSameOrigin, serverAuth,
+} from "@/lib/auth-server";
 
 export async function POST(request: Request) {
   try {
     requireSameOrigin(request);
+    requireAuthQuota(request, "login");
     const input = await request.json().catch(() => null);
     const email = typeof input?.email === "string" ? input.email.trim() : "";
     const password = typeof input?.password === "string" ? input.password : "";
